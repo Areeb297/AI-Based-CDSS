@@ -54,30 +54,35 @@ async def generate_alerts_for_patient(patient_data: PatientDataInput) -> Dict[st
     """
     Generates clinical alerts for a single patient by querying the Groq API.
     """
-    questions = {}
+    def q(text: str) -> str:
+        # Helper to include age/gender in every question
+        return f"For a {patient_data.age}-year-old {patient_data.gender.lower()} patient: {text}"
 
     drug_list_str = ', '.join(patient_data.drugs)
     allergy_list_str = ', '.join(patient_data.allergies) if patient_data.allergies else ""
 
-    questions["Drug-Drug Interactions"] = f"What is the main risk of combining {drug_list_str}?"
+    questions = {}
+
+    questions["Drug-Drug Interactions"] = q(f"What is the main risk of combining {drug_list_str}?")
     
     if patient_data.allergies:
-        questions["Drug-Allergy"] = f"Do {drug_list_str} conflict with a {allergy_list_str} allergy?"
+        questions["Drug-Allergy"] = q(f"Do {drug_list_str} conflict with a {allergy_list_str} allergy?")
     else:
         questions["Drug-Allergy"] = "N/A" # Or None, handled below
 
-    questions["Drug-Disease Contraindications"] = f"Do {drug_list_str} worsen {patient_data.diagnosis}?"
-    questions["Ingredient Duplication"] = f"Do {drug_list_str} contain overlapping active ingredients?"
-    questions["General Precautions"] = f"What should {patient_data.age}-year-old {patient_data.gender.lower()} patients be cautious about when using {drug_list_str}?"
-    questions["Therapeutic Class Conflicts"] = f"Are there therapeutic class conflicts between {drug_list_str}?"
-    questions["Warning Labels"] = f"What is the key warning label for {drug_list_str}?"
+    questions["Drug-Disease Contraindications"] = q(f"Do {drug_list_str} worsen {patient_data.diagnosis}?")
+    questions["Ingredient Duplication"] = q(f"Do {drug_list_str} contain overlapping active ingredients?")
+    # Updated General Precautions as per the user's example
+    questions["General Precautions"] = q(f"What should this patient be cautious about when using {drug_list_str}?")
+    questions["Therapeutic Class Conflicts"] = q(f"Are there therapeutic class conflicts between {drug_list_str}?")
+    questions["Warning Labels"] = q(f"What is the key warning label for {drug_list_str}?")
 
     if patient_data.gender.lower() == "female":
         if 12 <= patient_data.age <= 50: # Common child-bearing age range
-            questions["Pregnancy Warnings"] = f"Are {drug_list_str} safe during pregnancy?"
+            questions["Pregnancy Warnings"] = q(f"Are {drug_list_str} safe during pregnancy?")
         else:
             questions["Pregnancy Warnings"] = "N/A" # Or None
-        questions["Lactation Warnings"] = f"Are {drug_list_str} safe during lactation?"
+        questions["Lactation Warnings"] = q(f"Are {drug_list_str} safe during lactation?")
     else:
         questions["Pregnancy Warnings"] = "N/A" # Or None
         questions["Lactation Warnings"] = "N/A" # Or None
