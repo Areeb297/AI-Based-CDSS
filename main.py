@@ -50,7 +50,7 @@ def clean_answer(text: str) -> str:
     cleaned = cleaned.strip().replace("\\n", " ")
     return cleaned
 
-async def generate_alerts_for_patient(patient_data: PatientDataInput) -> Dict[str, AlertDetail]:
+async def generate_alerts_for_patient(patient_data: PatientDataInput) -> Dict[str, str]:
     """
     Generates clinical alerts for a single patient by querying the Groq API.
     """
@@ -87,11 +87,11 @@ async def generate_alerts_for_patient(patient_data: PatientDataInput) -> Dict[st
         questions["Pregnancy Warnings"] = "N/A" # Or None
         questions["Lactation Warnings"] = "N/A" # Or None
     
-    alerts: Dict[str, AlertDetail] = {}
+    alerts: Dict[str, str] = {}
 
     for category, question_text in questions.items():
         if not question_text or question_text == "N/A":
-            alerts[category] = AlertDetail(question="N/A", answer="N/A")
+            alerts[category] = "N/A"
         else:
             try:
                 chat_completion = await asyncio.to_thread(
@@ -110,11 +110,11 @@ async def generate_alerts_for_patient(patient_data: PatientDataInput) -> Dict[st
                 )
                 raw_answer = chat_completion.choices[0].message.content
                 final_answer = clean_answer(raw_answer)
-                alerts[category] = AlertDetail(question=question_text, answer=final_answer)
+                alerts[category] = final_answer
             except Exception as e:
                 # Log the error e
                 print(f"Error calling Groq API for category {category}: {e}")
-                alerts[category] = AlertDetail(question=question_text, answer="Error retrieving answer from AI.")
+                alerts[category] = "Error retrieving answer from AI."
 
     return alerts
 
@@ -126,7 +126,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-@app.post("/generate_clinical_alerts", response_model=Dict[str, AlertDetail])
+@app.post("/generate_clinical_alerts", response_model=Dict[str, str])
 async def create_clinical_alerts(patient_input: PatientDataInput):
     """
     Receives patient data, generates clinical questions, queries an AI model,
