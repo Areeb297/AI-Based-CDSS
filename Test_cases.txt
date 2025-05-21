@@ -1,0 +1,119 @@
+{
+  "drugs": ["warfarin", "ibuprofen"],
+  "age": 70,
+  "gender": "Male",
+  "allergies": [],
+  "diagnosis": "Atrial Fibrillation and Osteoarthritis"
+}
+
+{
+  "drugs": ["lisinopril", "ibuprofen"],
+  "age": 34,
+  "gender": "Female",
+  "allergies": ["sulfa drugs"],
+  "diagnosis": "Gestational Hypertension"
+}
+
+{
+  "drugs": ["metformin", "naproxen"],
+  "age": 55,
+  "gender": "Male",
+  "allergies": ["penicillin"],
+  "diagnosis": "Type 2 Diabetes Mellitus and Osteoarthritis"
+}
+
+{
+  "drugs": ["naproxen"],
+  "age": 70,
+  "gender": "Female",
+  "allergies": ["penicillin"],
+  "diagnosis": "Hypertension and Osteoarthritis"
+}
+
+{
+  "drugs": ["amlodipine", "acetaminophen"],
+  "age": 60,
+  "gender": "Male",
+  "allergies": ["aspirin"],
+  "diagnosis": "Primary Hypertension and Chronic Liver Disease"
+}
+
+{
+  "drugs": ["aspirin"],
+  "age": 10,
+  "gender": "Male",
+  "allergies": [],
+  "diagnosis": "Varicella (Chickenpox)"
+}
+
+{
+  "drugs": ["cocaine", "lisinopril"],
+  "age": 45,
+  "gender": "Male",
+  "allergies": [],
+  "diagnosis": "Essential Hypertension and Cocaine Use Disorder"
+}
+
+{
+  "drugs": ["metformin"],
+  "age": 30,
+  "gender": "Female",
+  "allergies": [],
+  "diagnosis": "Type 2 Diabetes Mellitus in Pregnancy"
+}
+
+{
+  "drugs": ["benzocaine teething gel"],
+  "age": 88,
+  "gender": "Female",
+  "allergies": [],
+  "diagnosis": "Gingivitis"
+}
+
+{
+  "drugs": ["warfarin", "aspirin", "clopidogrel"],
+  "age": 78,
+  "gender": "Male",
+  "allergies": [],
+  "diagnosis": "Atrial Fibrillation, History of Stroke, Coronary Artery Disease"
+}
+
+{
+  "drugs": ["metformin", "lisinopril", "ibuprofen"],
+  "age": 50,
+  "gender": "Female",
+  "allergies": ["penicillin"],
+  "diagnosis": "Type 2 Diabetes Mellitus, Hypertension, Osteoarthritis"
+}
+
+{
+  "drugs": ["atorvastatin", "amlodipine", "furosemide", "enalapril"],
+  "age": 72,
+  "gender": "Male",
+  "allergies": [],
+  "diagnosis": "Chronic Kidney Disease, Heart Failure, Hyperlipidemia, Hypertension"
+}
+
+{
+  "drugs": ["prednisone", "methotrexate", "folic acid", "naproxen"],
+  "age": 36,
+  "gender": "Female",
+  "allergies": [],
+  "diagnosis": "Rheumatoid Arthritis"
+}
+
+{
+  "drugs": ["digoxin", "furosemide", "spironolactone", "enalapril", "aspirin"],
+  "age": 84,
+  "gender": "Female",
+  "allergies": [],
+  "diagnosis": "Heart Failure, Atrial Fibrillation, Osteoarthritis"
+}
+
+{
+  "drugs": ["warfarin", "amiodarone", "simvastatin", "metoprolol", "clarithromycin"],
+  "age": 68,
+  "gender": "Male",
+  "allergies": [],
+  "diagnosis": "Atrial Fibrillation, Hyperlipidemia, Chronic Bronchitis"
+}

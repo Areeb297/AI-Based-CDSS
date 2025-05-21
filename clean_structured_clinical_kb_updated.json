@@ -1,0 +1,57 @@
+{
+    "Drug-Drug Interactions": {
+        "warfarin, ibuprofen, male, 65-120": "Risk of serious bleeding, especially GI.",
+        "lisinopril, ibuprofen, female, 18-64": "Risk of kidney injury and high potassium.",
+        "metformin, naproxen, male, 45-64": "Risk of lactic acidosis.",
+        "aspirin, male, 0-12": "Risk of Reye\u2019s syndrome in children."
+    },
+    "Drug-Allergy": {
+        "ibuprofen / penicillin, male, 65-120": "No known conflict with penicillin allergy.",
+        "lisinopril / sulfa drugs, female, 18-64": "No known interaction, but use with caution.",
+        "naproxen / penicillin, male, 45-64": "No expected cross-allergy between naproxen and penicillin."
+    },
+    "Drug-Disease Contraindications": {
+        "ibuprofen / hypertension, male, 65-120": "Ibuprofen may worsen blood pressure control.",
+        "naproxen / CKD, male, 45-64": "May further impair kidney function.",
+        "lisinopril / pregnancy, female, 18-64": "Avoid due to fetal risk.",
+        "aspirin / chickenpox, male, 0-12": "Risk of Reye\u2019s syndrome in children."
+    },
+    "Ingredient Duplication": {
+        "warfarin, ibuprofen, male, 65-120": "No overlapping ingredients; both increase bleeding risk.",
+        "lisinopril, ibuprofen, female, 18-64": "No duplication, but interaction risk is present.",
+        "metformin, naproxen, male, 45-64": "No overlapping active ingredients.",
+        "aspirin, male, 0-12": "Single drug; no duplication."
+    },
+    "General Precautions": {
+        "warfarin, ibuprofen, male, 65-120": "Monitor for bleeding signs like bruising or dark stools.",
+        "lisinopril, ibuprofen, female, 18-64": "Monitor kidney function and potassium levels.",
+        "metformin, naproxen, male, 45-64": "Monitor renal function to avoid complications.",
+        "aspirin, male, 0-12": "Avoid in children with viral illnesses."
+    },
+    "Therapeutic Class Conflicts": {
+        "warfarin, ibuprofen, male, 65-120": "Both affect clotting and may increase bleeding.",
+        "lisinopril, ibuprofen, female, 18-64": "May increase kidney risk together.",
+        "metformin, naproxen, male, 45-64": "Different classes but renal interaction possible.",
+        "aspirin, male, 0-12": "Therapeutic class conflict not applicable."
+    },
+    "Warning Labels": {
+        "warfarin, ibuprofen, male, 65-120": "Risk of serious bleeding, especially GI.",
+        "lisinopril, ibuprofen, female, 18-64": "May impair kidney function and raise potassium.",
+        "metformin, naproxen, male, 45-64": "Risk of lactic acidosis and GI bleeding.",
+        "aspirin, male, 0-12": "Warning about Reye\u2019s syndrome in children."
+    },
+    "Pregnancy Warnings": {
+        "lisinopril, ibuprofen, female, 18-64": "Avoid in pregnancy due to fetal toxicity."
+    },
+    "Lactation Warnings": {
+        "lisinopril, ibuprofen, female, 18-64": "Use with caution; data on safety is limited."
+    },
+    "Indications": {
+        "warfarin": "Prevention and treatment of thromboembolic disorders such as atrial fibrillation and deep vein thrombosis",
+        "ibuprofen": "Analgesic and anti-inflammatory used for pain, fever, and inflammation",
+        "lisinopril": "ACE inhibitor used for hypertension and heart failure",
+        "naproxen": "NSAID used for pain and inflammation",
+        "metformin": "First-line treatment for type 2 diabetes mellitus",
+        "aspirin": "Analgesic, antipyretic, and antiplatelet agent for pain, fever, and cardiovascular prophylaxis"
+    }
+}
