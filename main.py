@@ -313,10 +313,10 @@ Return ONLY a single, valid JSON object. Do NOT include extra brackets or commas
         "Content-Type": "application/json"
     }
     groq_payload = {
-        "model": "llama3-70b-8192",
+        "model": "meta-llama/llama-4-maverick-17b-128e-instruct",
         "temperature": 0.0,
         "top_p": 1.0,
-        "max_tokens": 8000,
+        "max_tokens": 8192,
         "stream": False,
         "stop": ["<think>", "<think\>"],
         "messages": [
