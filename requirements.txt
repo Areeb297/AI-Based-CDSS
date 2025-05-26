@@ -1,7 +1,23 @@
+# FastAPI and Uvicorn for the web server
 fastapi
-uvicorn
-groq
-python-dotenv
+uvicorn[standard] # Includes standard dependencies for uvicorn
+
+# Pydantic for data validation (used by FastAPI and Langchain)
 pydantic
+
+# Langchain core and specific modules
+langchain
+langchain-community # For loaders, vector stores, embeddings wrappers
+langchain-openai    # For ChatOpenAI integration (including with Groq via API base)
+
+# PDF processing and vector store
+pypdf                 # For PyPDFLoader to read PDF files
+faiss-cpu             # For FAISS vector store (CPU version)
+sentence-transformers # For HuggingFaceEmbeddings
+
+# LLM provider and environment management
+groq                  # Groq Python client (as you listed, for interacting with Groq API)
+python-dotenv         # For managing environment variables (e.g., API keys from a .env file)
+
+# General HTTP requests (often a dependency, and you listed it)
 requests
-regex
