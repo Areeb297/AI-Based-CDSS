@@ -76,20 +76,22 @@ metadatas = [doc.metadata for doc in docs] # Extract metadata (e.g., page number
 
 # 3. Initialize embeddings model
 # This model converts text chunks into numerical vectors.
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+# With OpenAI embeddings (uses API, no local model loading):
+from langchain_openai import OpenAIEmbeddings
+embeddings = OpenAIEmbeddings(model="text-embedding-3-medium")
 
 # 4. Create FAISS vector store from document chunks
 # FAISS allows for efficient similarity search on the text vectors.
 # This is the "Retrieval" part of RAG.
 # Check if a local FAISS index already exists to save time.
-faiss_index_path = "faiss_cdss_pdf"
+# Modify your vector store loading:
+faiss_index_path = "faiss_cdss_pdf"  # Use your existing folder structure
 if os.path.exists(faiss_index_path):
     print(f"Loading existing FAISS index from {faiss_index_path}")
-    vectordb = FAISS.load_local(faiss_index_path, embeddings, allow_dangerous_deserialization=True) # Added allow_dangerous_deserialization for newer Langchain versions
+    vectordb = FAISS.load_local(faiss_index_path, embeddings, allow_dangerous_deserialization=True)
 else:
-    print(f"Creating new FAISS index and saving to {faiss_index_path}")
-    vectordb = FAISS.from_texts(texts, embeddings, metadatas=metadatas)
-    vectordb.save_local(faiss_index_path)
+    # Don't create new index on Render - use pre-built only
+    raise FileNotFoundError("Pre-built FAISS index not found. Please ensure faiss_cdss_pdf folder is in your repo.")
 
 
 # === Define Expected Output Structure and Prompt Template ===
@@ -380,8 +382,8 @@ def assess_case(request: ClinicalRequest):
 # --- Main execution block to run the FastAPI app with Uvicorn ---
 if __name__ == "__main__":
     print("Starting FastAPI server with Uvicorn...")
-    # The host "0.0.0.0" makes the server accessible from other devices on the network.
-    # Port 8000 is a common choice for web applications.
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Render requires binding to PORT environment variable (default 10000)
+    port = int(os.environ.get("PORT", 10000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
     # To access the API documentation (Swagger UI), navigate to http://localhost:8000/docs
     # or http://<your-machine-ip>:8000/docs in your web browser.
