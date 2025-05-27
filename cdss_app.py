@@ -2,119 +2,140 @@ import os
 import json
 import re # For regular expression operations
 from dotenv import load_dotenv # Import load_dotenv
+from pathlib import Path
 
 # --- Potentially User-Configurable Paths ---
-# Update these paths if your files are located elsewhere or named differently.
-pdf_path = "CDSS_Expected_Outputs_Cases_ALL.pdf"  # Path to the PDF document
-ref_path = "references_list_key_brackets_value_plain.json" # Path to the JSON file containing references
+pdf_path = "CDSS_Expected_Outputs_Cases_ALL.pdf"
+ref_path = "references_list_key_brackets_value_plain.json"
+faiss_index_path = "faiss_cdss_pdf"
 
 # --- Environment Variable Setup ---
 load_dotenv() # Load environment variables from .env file
 
-# Set API key and base URL for the OpenAI-compatible LLM service (e.g., Groq)
-# The API key is now loaded from the .env file.
-# Make sure you have a .env file in the same directory as your script with:
-#
-# You can still set a default or directly assign if the .env variable isn't found,
-# or rely on it being set in the environment. For this example, we'll prioritize
-# the .env file and then allow for an explicit environment setting.
-
-# It's good practice to check if the key was loaded
-api_key = os.getenv("GROQ_API_KEY")
-if not api_key:
-    print("Warning: OPENAI_API_KEY not found in .env file or environment variables.")
-    # You could fall back to a hardcoded key here for development, but it's not recommended for production:
-    # api_key = "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" # Fallback, not recommended
-else:
-    os.environ["GROQ_API_KEY"] = api_key # Set it for Langchain if it expects it in os.environ
-
-# The API base can still be set directly or also moved to .env if preferred
-os.environ["OPENAI_API_BASE"] = "https://api.groq.com/openai/v1" # Replace with your actual base URL if needed
-# Or, to load from .env:
-# OPENAI_API_BASE="https://api.groq.com/openai/v1"
-# And in Python:
-# api_base = os.getenv("OPENAI_API_BASE", "https://api.groq.com/openai/v1") # With a default
-# os.environ["OPENAI_API_BASE"] = api_base
-
+# We will now load and use specific keys for each service directly in their initialization,
+# so the generic api_key loading block below is removed.
 
 # --- Import Langchain and related libraries ---
 from langchain_community.document_loaders import PyPDFLoader
-
-# Example of how you might access them (optional, for verification)
-# print(f"Using API Key: {os.getenv('OPENAI_API_KEY')}")
-# print(f"Using API Base: {os.getenv('OPENAI_API_BASE')}")
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
+from langchain.schema import Document # Ensure Document is imported
 
 # --- FastAPI and Pydantic for API creation ---
 from fastapi import FastAPI
 from pydantic import BaseModel
-import uvicorn # ASGI server to run FastAPI
+import uvicorn
 
 # === Load references for post-processing ===
-# This dictionary will be used to look up the full text of references
-# based on the numbers cited by the LLM.
-with open(ref_path, 'r') as f: # Ensure 'r' mode for reading
-    references_dict = json.load(f)
+try:
+    with open(ref_path, 'r') as f:
+        references_dict = json.load(f)
+except FileNotFoundError:
+    print(f"Error: References file not found at {ref_path}")
+    references_dict = {} # Default to empty if not found, or raise error
 
 # === PDF Loading and Vector Store Creation (RAG pipeline setup) ===
 
 # 1. Load PDF document
-loader = PyPDFLoader(pdf_path)
-pages = loader.load_and_split() # Loads PDF and splits it into pages (each page is a Document)
+try:
+    loader = PyPDFLoader(pdf_path)
+    pdf_document_pages = loader.load_and_split() 
+except FileNotFoundError:
+    raise FileNotFoundError(f"Error: PDF file not found at {pdf_path}. Please check the path.")
+except Exception as e:
+    raise RuntimeError(f"Error loading PDF: {e}")
 
-# 2. Split documents into smaller chunks
-# This is important for effective retrieval, as LLMs have context window limits.
+
+# 2. Split document pages into smaller chunks
 splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
-docs = splitter.split_documents(pages) # Further splits pages into smaller text chunks
-texts = [doc.page_content for doc in docs] # Extract text content
-metadatas = [doc.metadata for doc in docs] # Extract metadata (e.g., page number)
+doc_chunks = splitter.split_documents(pdf_document_pages)
 
-# 3. Initialize embeddings model
-# This model converts text chunks into numerical vectors.
-# With OpenAI embeddings (uses API, no local model loading):
-from langchain_openai import OpenAIEmbeddings
-embeddings = OpenAIEmbeddings(model="text-embedding-3-medium")
+# 3. Filter document chunks to ensure they have valid content
+filtered_doc_chunks_for_faiss = []
+print(f"\nProcessing {len(doc_chunks)} document chunks from PDF...")
+for i, chunk in enumerate(doc_chunks):
+    content = chunk.page_content
+    metadata = chunk.metadata
+
+    if isinstance(content, str) and content.strip():
+        filtered_doc_chunks_for_faiss.append(chunk) 
+    else:
+        page_info = metadata.get('page', 'N/A') if metadata else 'N/A'
+        source_info = metadata.get('source', 'N/A') if metadata else 'N/A'
+        content_preview = str(content)[:100] + "..." if content and len(str(content)) > 100 else str(content)
+        print(f"Warning: Skipping document chunk from source '{source_info}', page {page_info} (original chunk index {i}) due to empty or invalid content. Type: {type(content)}, Content preview: '{content_preview}'")
+
+print(f"Number of valid document chunks for FAISS after filtering: {len(filtered_doc_chunks_for_faiss)}")
+
+if not filtered_doc_chunks_for_faiss:
+    raise ValueError("No valid document chunks with content found in the PDF after processing. Cannot build FAISS index.")
+
+# (Optional verification block for filtered_doc_chunks_for_faiss can remain if you find it useful)
+print("\n--- Verifying filtered_doc_chunks_for_faiss before FAISS.from_documents ---")
+# ... (verification code from your script) ...
+if not isinstance(filtered_doc_chunks_for_faiss, list):
+    print(f"CRITICAL ERROR: filtered_doc_chunks_for_faiss is not a list. Type: {type(filtered_doc_chunks_for_faiss)}")
+    raise TypeError("filtered_doc_chunks_for_faiss is not a list.")
+else:
+    print(f"filtered_doc_chunks_for_faiss is confirmed to be a list with {len(filtered_doc_chunks_for_faiss)} Document objects.")
+    all_docs_have_valid_content = True
+    for idx, doc_item in enumerate(filtered_doc_chunks_for_faiss):
+        if not isinstance(doc_item, Document):
+            print(f"CRITICAL ERROR: Element at index {idx} is NOT a Document object. Type: {type(doc_item)}")
+            all_docs_have_valid_content = False
+            break
+        if not isinstance(doc_item.page_content, str) or not doc_item.page_content.strip():
+            page_info = doc_item.metadata.get('page', 'N/A') if doc_item.metadata else 'N/A'
+            print(f"CRITICAL ERROR: Document object at index {idx} (page {page_info}) has invalid or empty page_content. Type: {type(doc_item.page_content)}")
+            all_docs_have_valid_content = False
+            break
+    if not all_docs_have_valid_content:
+        raise TypeError("CRITICAL: Not all Document objects in filtered_doc_chunks_for_faiss have valid, non-empty page_content. Check logs.")
+    else:
+        print("All Document objects in filtered_doc_chunks_for_faiss have been verified. Proceeding to FAISS.")
+print("--- End of verification for filtered_doc_chunks_for_faiss ---\n")
+
+
+# 3. Initialize embeddings model for ACTUAL OPENAI
+actual_openai_api_key = os.getenv("ACTUAL_OPENAI_API_KEY")
+if not actual_openai_api_key:
+    raise ValueError("ACTUAL_OPENAI_API_KEY not found in .env file. This key is needed for OpenAI embeddings.")
+
+embeddings = OpenAIEmbeddings(
+    model="text-embedding-ada-002",
+    openai_api_key=actual_openai_api_key
+    # By not specifying openai_api_base_url, it will default to the official OpenAI API endpoint.
+)
+print("OpenAIEmbeddings initialized to use actual OpenAI API.")
 
 # 4. Create FAISS vector store from document chunks
-# FAISS allows for efficient similarity search on the text vectors.
-# This is the "Retrieval" part of RAG.
-# Check if a local FAISS index already exists to save time.
-# Modify your vector store loading:
-faiss_index_path = "faiss_cdss_pdf"  # Use your existing folder structure
-if os.path.exists(faiss_index_path):
+index_file = Path(faiss_index_path) / "index.faiss"
+pkl_file = Path(faiss_index_path) / "index.pkl"
+
+if index_file.exists() and pkl_file.exists():
     print(f"Loading existing FAISS index from {faiss_index_path}")
+    # When loading, FAISS just needs an embedding function. The key used during its creation doesn't need to be active
+    # for loading if the loaded data doesn't require re-embedding with that specific key immediately.
+    # However, the `embeddings` object passed here should be compatible (same model, dimensions).
     vectordb = FAISS.load_local(faiss_index_path, embeddings, allow_dangerous_deserialization=True)
 else:
-    # Don't create new index on Render - use pre-built only
-    raise FileNotFoundError("Pre-built FAISS index not found. Please ensure faiss_cdss_pdf folder is in your repo.")
-
+    print(f"FAISS index not found. Building new index at {faiss_index_path} ...")
+    vectordb = FAISS.from_documents(filtered_doc_chunks_for_faiss, embeddings)
+    vectordb.save_local(faiss_index_path)
+    print(f"FAISS index built and saved at {faiss_index_path}")
 
 # === Define Expected Output Structure and Prompt Template ===
-
-# List of keys that MUST be present in the final JSON output.
 EXPECTED_KEYS = [
-    "Drug-Drug Interactions",
-    "Drug-Allergy",
-    "Drug-Disease Contraindications",
-    "Ingredient Duplication",
-    "Pregnancy Warnings",
-    "Lactation Warnings",
-    "General Precautions",
-    "Therapeutic Class Conflicts",
-    "Warning Labels",
-    "Indications",
-    "Severity",
-    "References"
+    "Drug-Drug Interactions", "Drug-Allergy", "Drug-Disease Contraindications",
+    "Ingredient Duplication", "Pregnancy Warnings", "Lactation Warnings",
+    "General Precautions", "Therapeutic Class Conflicts", "Warning Labels",
+    "Indications", "Severity", "References"
 ]
 
-# Define the prompt template for the LLM.
-# This template guides the LLM to generate output in the desired format and style.
-# It includes instructions on structure, content, and reference citation.
 prompt = PromptTemplate(
     input_variables=["context", "question"],
     template="""
@@ -193,14 +214,14 @@ IMPORTANT INSTRUCTIONS:
   "Severity": ["High"],
   "References": [
     "[1] Whelton A. Nephrotoxicity of nonsteroidal anti-inflammatory drugs: physiologic foundations and clinical implications. Am J Med. 1999;106(5B):13S-24S. [PMID:10390106]",
-    "[2] FDA label for ibuprofen: [https://www.accessdata.fda.gov/drugsatfda_docs/label/2016/017463s117lbl.pdf](https://www.accessdata.fda.gov/drugsatfda_docs/label/2016/017463s117lbl.pdf)",
+    "[2] FDA label for ibuprofen: [https://www.accessdata.fda.gov/drugsatfda_docs/label/2016/017463s117lbl.pdf]",
     "[3] Lexicomp Drug Allergy Checker. No cross-reactivity between sulfa drugs and NSAIDs/ACE inhibitors.",
     "[4] American College of Obstetricians and Gynecologists (ACOG). Hypertension in pregnancy. Practice Bulletin No. 203.",
     "[5] Best clinical practice/expert consensus.",
-    "[6] FDA label for lisinopril: [https://www.accessdata.fda.gov/drugsatfda_docs/label/2016/019690s043lbl.pdf](https://www.accessdata.fda.gov/drugsatfda_docs/label/2016/019690s043lbl.pdf)",
+    "[6] FDA label for lisinopril: [https://www.accessdata.fda.gov/drugsatfda_docs/label/2016/019690s043lbl.pdf]",
     "[7] UpToDate: Use of antihypertensive drugs in pregnancy and lactation.",
     "[8] Hale TW. Medications and Mothers' Milk. Ibuprofen considered safe during lactation.",
-    "[9] FDA label for ibuprofen: [https://www.accessdata.fda.gov/drugsatfda_docs/label/2016/017463s117lbl.pdf](https://www.accessdata.fda.gov/drugsatfda_docs/label/2016/017463s117lbl.pdf)",
+    "[9] FDA label for ibuprofen: [https://www.accessdata.fda.gov/drugsatfda_docs/label/2016/017463s117lbl.pdf]",
     "[A] Reference A text.",
     "[B] Reference B text.",
     "[C] Reference C text.",
@@ -219,30 +240,34 @@ CONTEXT (Relevant Knowledge & Example Outputs from the PDF Document):
 FILL EVERY CATEGORY that has any information in the context. No explanations. Only a valid JSON object.
 """
 )
-# === Initialize LLM and RAG Chain ===
+# === Initialize LLM for GROQ API and RAG Chain ===
+# === Initialize LLM for GROQ API and RAG Chain ===
+groq_api_key_for_llm = os.getenv("GROQ_API_KEY")
+if not groq_api_key_for_llm:
+    raise ValueError("GROQ_API_KEY not found in .env file. This key is needed for the Groq LLM.")
 
-# Initialize the LLM (Language Model). Here, using a Llama model via Groq.
-# Temperature=0.0 aims for more deterministic and less creative outputs.
-llm = ChatOpenAI(model="llama3-70b-8192", temperature=0.0)
+llm = ChatOpenAI(
+    model="llama3-70b-8192", # Or your preferred Groq model
+    temperature=0.0,
+    openai_api_key=groq_api_key_for_llm,
+    openai_api_base="https://api.groq.com/openai/v1" # <<< CORRECTED PARAMETER NAME
+)
+print("ChatOpenAI (LLM) initialized to use Groq API.")
 
-# Create the RetrievalQA chain.
-# This chain combines the retriever (FAISS vector store) with the LLM.
 rag_chain = RetrievalQA.from_chain_type(
     llm=llm,
-    retriever=vectordb.as_retriever(search_kwargs={"k": 12}), # Retrieve top 12 relevant chunks
-    return_source_documents=True, # Useful for debugging, to see what context was retrieved
-    chain_type_kwargs={"prompt": prompt}, # Pass the custom prompt to the LLM part of the chain
+    retriever=vectordb.as_retriever(search_kwargs={"k": 12}),
+    return_source_documents=True,
+    chain_type_kwargs={"prompt": prompt},
 )
 
 # === FastAPI Application Setup ===
-
 app = FastAPI(
     title="Clinical Decision Support API",
     description="API for assessing clinical cases using RAG.",
     version="1.0.1"
 )
 
-# Pydantic model for input validation. This defines the structure of the request body.
 class ClinicalRequest(BaseModel):
     drugs: list
     age: int
@@ -250,140 +275,89 @@ class ClinicalRequest(BaseModel):
     allergies: list = []
     diagnosis: str = ''
 
-# Function to enforce the output contract (JSON structure and reference formatting)
 def enforce_contract(output_json, references_dict_lookup):
-    """
-    Ensures the output JSON conforms to EXPECTED_KEYS and formats references.
-
-    Args:
-        output_json (dict): The JSON output from the LLM.
-        references_dict_lookup (dict): The dictionary of reference texts.
-
-    Returns:
-        dict: The processed and validated JSON output.
-    """
     processed_json = {}
-
-    # Ensure all expected keys are present and in order
     for key in EXPECTED_KEYS:
-        if key in output_json:
-            processed_json[key] = output_json[key]
-        else:
-            # Provide default "None" value if key is missing, except for "References"
-            processed_json[key] = ["None"] if key != "References" else []
+        processed_json[key] = output_json.get(key, ["None"] if key != "References" else [])
 
-    # Collect all unique reference numbers cited in the output
-    ref_nums = set()
+    ref_nums_extracted = set()
     for key, values in processed_json.items():
-        if key == "References": # Skip the References key itself for now
-            continue
+        if key == "References": continue
         if isinstance(values, list):
             for value_item in values:
-                # Find all occurrences of [number]
-                found_numbers = re.findall(r"\[(\d+)\]", str(value_item))
-                for num in found_numbers:
-                    ref_nums.add(num)
-
-    # Build the "References" list with full citations
+                if isinstance(value_item, str): 
+                    found_numbers = re.findall(r"[(\d+)]", value_item) # Corrected regex
+                    for num_str in found_numbers:
+                        ref_nums_extracted.add(num_str)
+    
     refs_full_text = []
-    # Sort reference numbers numerically before looking them up
-    for num_str in sorted(list(ref_nums), key=int):
-        ref_key_in_dict = f"[{num_str}]" # The format references are stored in references_dict
+    valid_ref_nums_int = []
+    for num_str in ref_nums_extracted:
+        try:
+            valid_ref_nums_int.append(int(num_str))
+        except ValueError:
+            print(f"Warning: Could not convert extracted reference '{num_str}' to an integer. Skipping.")
+            
+    for num_int in sorted(list(set(valid_ref_nums_int))): 
+        ref_key_in_dict = f"[{num_int}]"
         if ref_key_in_dict in references_dict_lookup:
             refs_full_text.append(f"{ref_key_in_dict} {references_dict_lookup[ref_key_in_dict]}")
         else:
-            # If a reference number is cited but not found, add a placeholder or log an error.
-            # For robustness, you might want to handle this case more explicitly.
-            refs_full_text.append(f"[{num_str}] Reference text not found.")
-
+            refs_full_text.append(f"{ref_key_in_dict} Reference text not found.")
+    
     processed_json["References"] = refs_full_text
     return processed_json
 
-# Function to robustly extract JSON from the LLM's text response
 def extract_json_from_response(text: str) -> dict:
-    """
-    Extracts a JSON object from a string, trying to handle markdown code fences.
-    """
     text = text.strip()
-    
-    # Try to find JSON within ```json ... ``` or ``` ... ```
-    # Using re.DOTALL (via [\s\S]) to ensure a_is_right_now.s_between_curlies works across newlines.
     match_json_block = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE)
     if match_json_block:
         json_str = match_json_block.group(1)
     else:
-        # Fallback to finding the first '{' to the last '}'
-        # This is your original robust regex for a general JSON blob
         match_curly_braces = re.search(r"(\{[\s\S]*\})", text)
         if not match_curly_braces:
             raise ValueError("No JSON object found in LLM output. Output was: " + text)
         json_str = match_curly_braces.group(1)
-
-    json_str = json_str.strip() # Ensure no leading/trailing whitespace in the extracted JSON string
-
+    
+    json_str = json_str.strip()
     try:
-        # Attempt to parse the extracted string as JSON
         return json.loads(json_str)
     except json.JSONDecodeError as e:
-        # The error "Invalid control character" means json.loads itself can't handle it.
-        # Prompt engineering is the primary way to fix this.
-        # Auto-repairing arbitrary JSON errors from LLMs is complex and brittle.
         error_message = (
             f"Failed to decode JSON from LLM output. Error: {e}. "
             f"Problematic JSON string (after extraction attempts) was:\n>>>\n{json_str}\n<<<"
         )
         raise ValueError(error_message)
 
-
-
-# API endpoint to assess a clinical case
 @app.post("/clinical-assess")
 def assess_case(request: ClinicalRequest):
-    """
-    API endpoint to process a clinical request and return a structured assessment.
-    """
-    # Format the user's input into a query string for the RAG chain.
     user_query = (
         f"Input:\n{request.dict()}\n"
         "Generate structured output as shown in the clinical decision support format provided in the prompt."
     )
-
-    # Invoke the RAG chain
     try:
-        result = rag_chain.invoke({"query": user_query}) # Use invoke for LCEL chains
+        result = rag_chain.invoke({"query": user_query})
     except Exception as e:
         print(f"Error during RAG chain invocation: {e}")
         return {"error": f"Error during RAG chain invocation: {str(e)}", "raw_output": None}
 
-
     llm_output_text = result.get("result", "")
-
-    # Attempt to extract the JSON object from the LLM's response
     try:
         output_json = extract_json_from_response(llm_output_text)
     except ValueError as e:
         print(f"Error extracting JSON: {e}")
-        # If JSON extraction fails, return an error and the raw LLM output for debugging.
         return {"error": str(e), "raw_output": llm_output_text, "source_documents": result.get("source_documents")}
 
-    # Enforce the output contract (structure and references)
     try:
         final_output_json = enforce_contract(output_json, references_dict)
     except Exception as e:
         print(f"Error enforcing contract: {e}")
         return {"error": f"Error enforcing contract: {str(e)}", "raw_llm_json": output_json, "raw_output": llm_output_text}
-
-    # Return the structured and validated JSON response.
-    # Optionally, include source documents if needed for tracing or debugging.
-    # return {"assessment": final_output_json, "source_documents": result.get("source_documents")}
+    
     return final_output_json
-
 
 # --- Main execution block to run the FastAPI app with Uvicorn ---
 if __name__ == "__main__":
     print("Starting FastAPI server with Uvicorn...")
-    # Render requires binding to PORT environment variable (default 10000)
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 10000)) 
     uvicorn.run(app, host="0.0.0.0", port=port)
-    # To access the API documentation (Swagger UI), navigate to http://localhost:8000/docs
-    # or http://<your-machine-ip>:8000/docs in your web browser.
