@@ -240,6 +240,208 @@ CONTEXT (Relevant Knowledge & Example Outputs from the PDF Document):
 FILL EVERY CATEGORY that has any information in the context. No explanations. Only a valid JSON object.
 """
 )
+
+
+
+
+# ------- PATHWAY PROMPT -------
+PATHWAY_PROMPT = PromptTemplate(
+    input_variables=["context", "question"],
+    template="""
+You are a clinical decision support system.
+For every clinical scenario, ALWAYS output 3 clinical management pathways (as JSON), in this order:
+- "Option 1" (lowest risk, guideline-adherent)
+- "Option 2" (medium risk, mitigated with monitoring)
+- "Option 3" (high risk, unsafe, not recommended)
+
+For each pathway, include:
+- "recommendation": Specify exact drug name, dose, route, frequency, maximum duration, any adjuncts (e.g., add PPI for GI protection), explicit alternatives, what to avoid, and for how long. For the "high" risk pathway, ALWAYS include: "Do not use unless life-threatening situation and no alternatives."
+- "details": concise clinical rationale for this pathway.
+- "tradeoff": describe pros and cons (e.g., "slower pain control, lowest risk" vs. "fastest pain control, high risk of bleeding").
+- "monitoring": frequency and specifics (e.g., "check INR every 3 days, watch for GI bleeding signs daily").
+- In every recommendation, details, tradeoff, or monitoring field, cite the relevant reference numbers inline at the end (e.g., [1][2][3]) if supported by the context. If there is no reference, cite [no reference].
+
+**For Saudi Arabia:**
+- Do not mention alcohol or its avoidance (alcohol is prohibited and not available).
+- Use only locally available medications and standard practice in Saudi Arabia.
+
+**References requirements:**
+- Your output MUST be a single JSON object with "clinical_pathways" and "References" as top-level keys.
+- ALWAYS include the "References" object at the end, mapping every cited number in the pathways to the full citation (with link) from the context. If there is no reference, do not include it in the References object.
+
+**Style and diversity requirements:**
+- Vary your wording, structure, and phrasing for every test case.
+- Do not copy the example output or use the same template; use synonyms, reword sentences, and make the answer feel fresh for each scenario.
+- Make every pathway reflect the patient's age, gender, diagnosis, and specific drug details.
+- If applicable, highlight any unique Saudi practice or local guideline.
+- Avoid "boilerplate" language.
+
+ALWAYS output valid JSON with this structure and nothing else.
+
+EXAMPLE INPUT 1:
+{{{{
+    "input": {{{{
+      "drugs": ["warfarin", "ibuprofen"],
+      "age": 70,
+      "gender": "Male",
+      "allergies": [],
+      "diagnosis": "Atrial Fibrillation and Osteoarthritis"
+    }}}},
+
+    "expected_output": {{{{
+      "Drug-Drug Interactions": [
+        "Risk of serious bleeding, especially GI, when warfarin is combined with NSAIDs such as ibuprofen."
+      ],
+      "Drug-Allergy": [
+        "No allergy conflicts."
+      ],
+      "Drug-Disease Contraindications": [
+        "NSAIDs like ibuprofen may worsen control of hypertension and can increase risk of cardiovascular events."
+      ],
+      "Ingredient Duplication": [
+        "No overlapping ingredients; both increase bleeding risk through different mechanisms."
+      ],
+      "Pregnancy Warnings": [
+        "None (not applicable in male patients)."
+      ],
+      "Lactation Warnings": [
+        "None (not applicable in male patients)."
+      ],
+      "General Precautions": [
+        "Monitor for bleeding signs like bruising or dark stools.",
+        "Monitor for signs of kidney damage due to ibuprofen, especially in elderly."
+      ],
+      "Therapeutic Class Conflicts": [
+        "Both affect clotting and may increase bleeding risk when used together."
+      ],
+      "Warning Labels": [
+        "Risk of serious bleeding, especially GI, when warfarin is combined with NSAIDs.",
+        "Risk of gastrointestinal bleeding is higher in older adults taking NSAIDs."
+      ],
+      "Indications": [
+        "Warfarin: Prevention and treatment of thromboembolic disorders such as atrial fibrillation and deep vein thrombosis.",
+        "Ibuprofen: Analgesic and anti-inflammatory used for pain, fever, and inflammation."
+      ]
+    }}}},
+    "severity": "high"
+}}}}
+
+EXAMPLE OUTPUT 1:
+{{{{
+  "clinical_pathways": [
+    {{{{
+      "recommendation": "Acetaminophen 500mg orally every 6 hours as needed for pain, not exceeding 3g per day, for up to 10 days. Avoid NSAIDs entirely. Review pain control and function after 7 days. [1][2][3]",
+      "details": "Avoids NSAID-warfarin interaction, minimizing bleeding risk. [1][2]",
+      "tradeoff": "Pain relief may be slower or less potent, but risk of major bleeding is minimized. [2][3]",
+      "monitoring": "Check INR as per anticoagulation protocol. Review pain and function at 7 days. [2][4]"
+    }}}},
+    {{{{
+      "recommendation": "If pain is significant, ibuprofen 200mg orally twice daily after food for up to 3 days, with omeprazole 20mg daily for GI protection, may be considered under close INR monitoring. Stop NSAID immediately if any bleeding or easy bruising occurs. [2][3][4]",
+      "details": "Short-term NSAID use with GI protection and INR monitoring offers improved pain relief with a controlled risk of bleeding. [2][4]",
+      "tradeoff": "Better symptom control but requires vigilant monitoring for complications. [3][4]",
+      "monitoring": "Check INR before, during, and after NSAID course; monitor for GI symptoms and bruising daily. [2][4]"
+    }}}},
+    {{{{
+      "recommendation": "Ibuprofen 400mg orally three times daily for 7 days without any GI protection or INR monitoring. Do not use unless life-threatening situation and no alternatives. [no reference]",
+      "details": "Extended, high-dose NSAID therapy in anticoagulated elderly carries a very high risk of GI and intracranial hemorrhage. [no reference]",
+      "tradeoff": "Rapid and powerful pain relief but at the cost of life-threatening complications. [no reference]",
+      "monitoring": "None. [no reference]"
+    }}}}
+  ],
+  "References": {{{{
+    "[1]": "FDA label for warfarin: https://www.accessdata.fda.gov/drugsatfda_docs/label/...",
+    "[2]": "Saudi MOH Anticoagulation Guidelines: https://moh.gov.sa/anticoag-guidelines.pdf",
+    "[3]": "Saudi MOH Pain Management Guidelines: https://moh.gov.sa/pain-guidelines.pdf",
+    "[4]": "Best Practices in INR Monitoring, Saudi MOH 2021: https://moh.gov.sa/inr-monitoring.pdf"
+  }}}}
+}}}}
+
+EXAMPLE INPUT 2:
+{{{{
+"input": {{{{
+        "drugs": ["lisinopril", "ibuprofen"],
+        "age": 34,
+        "gender": "Female",
+        "allergies": ["sulfa drugs"],
+        "diagnosis": "Gestational Hypertension"
+}}}},
+
+"expected_output": {{{{
+            "Drug-Drug Interactions": [
+                "Increased risk of kidney injury and hyperkalemia when ACE inhibitors like lisinopril are combined with NSAIDs."
+            ],
+            "Drug-Allergy": [
+                "No known cross-reactivity between lisinopril or ibuprofen and sulfa drugs."
+            ],
+            "Drug-Disease Contraindications": [
+                "NSAIDs like ibuprofen may worsen hypertension and impair kidney function, especially during pregnancy."
+            ],
+            "Ingredient Duplication": [
+                "No overlapping active ingredients."
+            ],
+            "Pregnancy Warnings": [
+                "Lisinopril is contraindicated in pregnancy due to risk of fetal toxicity and malformations."
+            ],
+            "Lactation Warnings": [
+                "Ibuprofen is generally considered compatible with breastfeeding, but should be used with caution."
+            ],
+            "General Precautions": [
+                "Monitor blood pressure, kidney function, and for signs of hyperkalemia when combining lisinopril and NSAIDs."
+            ],
+            "Therapeutic Class Conflicts": [
+                "ACE inhibitors and NSAIDs both can affect renal function; risk is additive."
+            ],
+            "Warning Labels": [
+                "NSAIDs may worsen hypertension and kidney function in pregnancy.",
+                "Lisinopril can cause fetal toxicity if used during pregnancy."
+            ],
+            "Indications": [
+                "Lisinopril: ACE inhibitor used for hypertension and heart failure.",
+                "Ibuprofen: Analgesic and anti-inflammatory used for pain, fever, and inflammation."
+            ]
+}}}},
+"severity": "high"
+}}}}
+
+EXAMPLE OUTPUT 2:
+{{{{
+  "clinical_pathways": [
+    {{{{
+      "recommendation": "For gestational hypertension, discontinue lisinopril immediately and use paracetamol 500mg orally every 6-8 hours as needed for pain, not exceeding 4g daily. NSAIDs are contraindicated in pregnancy. Consult an obstetrician for alternative antihypertensive therapy. [5][6][7]",
+      "details": "Paracetamol is the preferred analgesic in pregnancy; both lisinopril and NSAIDs are contraindicated due to fetal risk. [6][7]",
+      "tradeoff": "Prioritizes maternal and fetal safety, but may offer only moderate pain relief. [5][7]",
+      "monitoring": "Monitor maternal blood pressure and renal function every clinic visit. [7][8]"
+    }}}},
+    {{{{
+      "recommendation": "If pain is uncontrolled, ibuprofen 200mg orally twice daily with meals for up to 48 hours may be considered under strict specialist supervision, only in the second trimester, and never with ACE inhibitors. [6][8]",
+      "details": "Short-term, low-dose NSAID use in the second trimester is possible under supervision, but with risk. [6][8]",
+      "tradeoff": "Improved pain control, but moderate risk to fetal renal development and pregnancy complications. [8]",
+      "monitoring": "Obstetrician should monitor maternal kidney function and fetal wellbeing closely during and after use. [7][8]"
+    }}}},
+    {{{{
+      "recommendation": "Continue lisinopril and initiate ibuprofen 400mg orally three times daily for 7 days in pregnancy with no monitoring. Do not use unless life-threatening situation and no alternatives. [no reference]",
+      "details": "Combining ACE inhibitors and NSAIDs in pregnancy leads to major risk of fetal toxicity, malformation, and maternal kidney injury. [no reference]",
+      "tradeoff": "Strongest pain and BP control, but highest risk for catastrophic fetal and maternal outcomes. [no reference]",
+      "monitoring": "None. [no reference]"
+    }}}}
+  ],
+  "References": {{{{
+    "[5]": "WHO Model List of Essential Medicines, 2023: https://www.who.int/publications/i/item/WHO-MED-2023.04",
+    "[6]": "Saudi MOH Guidelines for Hypertension in Pregnancy: https://www.moh.gov.sa/Hypertension-Pregnancy-Guidelines.pdf",
+    "[7]": "FDA label for lisinopril: https://www.accessdata.fda.gov/drugsatfda_docs/label/...",
+    "[8]": "Management of non-obstetric pain in pregnancy, UpToDate, 2022."
+  }}}}
+}}}}
+
+SCENARIO:
+{question}
+
+CONTEXT:
+{context}
+"""
+)
+
+
 # === Initialize LLM for GROQ API and RAG Chain ===
 # === Initialize LLM for GROQ API and RAG Chain ===
 groq_api_key_for_llm = os.getenv("GROQ_API_KEY")
@@ -261,6 +463,22 @@ rag_chain = RetrievalQA.from_chain_type(
     chain_type_kwargs={"prompt": prompt},
 )
 
+llm_pathways = ChatOpenAI(
+    model="llama3-70b-8192", # Or your preferred Groq model
+    temperature=0.1,
+    openai_api_key=groq_api_key_for_llm,
+    openai_api_base="https://api.groq.com/openai/v1" # <<< CORRECTED PARAMETER NAME
+)
+
+# Initialize the LLM chain for pathways
+rag_chain_pathways = RetrievalQA.from_chain_type(
+    llm=llm_pathways,  # (or llm if using the same LLM)
+    retriever=vectordb.as_retriever(search_kwargs={"k": 17}),
+    return_source_documents=True,
+    chain_type_kwargs={"prompt": PATHWAY_PROMPT},
+)
+
+
 # === FastAPI Application Setup ===
 app = FastAPI(
     title="Clinical Decision Support API",
@@ -274,6 +492,12 @@ class ClinicalRequest(BaseModel):
     gender: str
     allergies: list = []
     diagnosis: str = ''
+    
+class PathwayTestCase(BaseModel):
+    input: dict
+    expected_output: dict = {}
+    severity: str = ""
+
 
 def enforce_contract(output_json, references_dict_lookup):
     processed_json = {}
@@ -355,6 +579,28 @@ def assess_case(request: ClinicalRequest):
         return {"error": f"Error enforcing contract: {str(e)}", "raw_llm_json": output_json, "raw_output": llm_output_text}
     
     return final_output_json
+
+# --- Endpoint 2: /clinical-pathways (structured like /clinical-assess) ---
+@app.post("/clinical-pathways")
+def clinical_pathways(case: PathwayTestCase):
+    user_query = (
+        f"Patient scenario:\n{json.dumps(case.input, ensure_ascii=False)}\n"
+        "Generate three clinical pathways with references as shown in the pathways output format."
+    )
+    try:
+        result = rag_chain_pathways.invoke({"query": user_query})
+    except Exception as e:
+        print(f"Error during RAG chain invocation for /clinical-pathways: {e}")
+        return {"error": f"Error during RAG chain invocation: {str(e)}", "raw_output": None}
+
+    llm_output_text = result.get("result", "")
+    try:
+        output_json = extract_json_from_response(llm_output_text)
+    except ValueError as e:
+        print(f"Error extracting JSON for /clinical-pathways: {e}")
+        return {"error": str(e), "raw_output": llm_output_text, "source_documents": result.get("source_documents")}
+
+    return output_json
 
 # --- Main execution block to run the FastAPI app with Uvicorn ---
 if __name__ == "__main__":
