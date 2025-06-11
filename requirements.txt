@@ -21,3 +21,4 @@ python-dotenv         # For managing environment variables (e.g., API keys from 
 
 # General HTTP requests (often a dependency, and you listed it)
 requests
+python-multipart
