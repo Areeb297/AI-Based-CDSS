@@ -602,6 +602,140 @@ def clinical_pathways(case: PathwayTestCase):
 
     return output_json
 
+
+"""# ==================== OPENROUTER SECTION ===================="""
+
+# Install required packages for HTTP requests and API server
+# !pip install requests fastapi uvicorn requests python-multipart python-dotenv
+
+# ---- DETAILED PROMPT CONFIGURATION ----
+# System prompt defines the AI assistant's expertise and behavior
+system_prompt = (
+    "You are a highly trained, detail-oriented clinical radiology assistant. Your answers must always include clear laterality, precise anatomic locations, and mention of classic radiological signs if present. If the findings are ambiguous, state so honestly and recommend further steps."
+)
+
+# User prompt provides specific instructions for chest X-ray interpretation
+# This prompt ensures thorough analysis and prevents missing subtle findings
+user_prompt = (
+    "You are a radiology assistant reviewing a chest X-ray for a physician. "
+    "You must actively search for and describe any possible abnormal findings, even if subtle or borderline. "
+    "Never declare the X-ray completely normal unless you are absolutely certain. "
+    "If there is any uncertainty, mention and describe all possible abnormalities, opacities, densities, lesions, or subtle changes. "
+    "Include a brief differential diagnosis for any finding, and always comment on the most clinically significant abnormalities first.\n\n"
+    "Write your report using this exact format:\n\n"
+    "1. AP (Frontal) View: [A detailed, well-structured paragraph describing all findings, both positive and negative, including any subtle abnormalities, their location and laterality, and classic radiological signs if present.]\n\n"
+    "2. Lateral View: [A paragraph describing findings for the lateral view, including confirmation or refutation of AP findings, and any new abnormalities seen only on the lateral view.]\n\n"
+    "3. Impression: [A concise summary diagnosis, mentioning any abnormal findings, differentials, and clinical recommendations.]\n\n"
+    "4. Recommendations: [A short paragraph with specific next steps, such as further imaging, clinical follow-up, or limitations of the study.]\n\n"
+    "Do NOT use bullet points, asterisks, or special characters. Each section must be a numbered header followed by a paragraph, separated by a blank line. Focus on clinical safety and do not miss subtle findings."
+)
+
+# Get OpenRouter API key from environment variable
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+# Check if API key is loaded
+if not OPENROUTER_API_KEY:
+    raise ValueError("OPENROUTER_API_KEY not found in environment variables")
+
+# ---- REPORT PARSING FUNCTION ----
+def parse_report(report_text):
+    """
+    Parse the AI-generated report into structured sections
+    
+    Args:
+        report_text (str): Raw text report from the AI model
+    
+    Returns:
+        dict: Dictionary with keys for each report section
+    """
+    # Define expected section keys for the structured report
+    keys = ["AP_View", "Lateral_View", "Impression", "Recommendations"]
+    
+    # Use regex to split the report by numbered section headers
+    # This pattern matches variations of section names
+    sections = re.split(r'\n*\d\.\s*(?:AP \(Frontal\) View|Lateral View|Impression|Recommendations):', report_text)
+    
+    # Clean up sections - remove empty strings and whitespace
+    sections = [s.strip() for s in sections if s.strip()]
+    
+    # Map sections to dictionary keys, handling missing sections gracefully
+    report_dict = {k: (sections[i] if i < len(sections) else "") for i, k in enumerate(keys)}
+    return report_dict
+
+# ---- FASTAPI APPLICATION SETUP ----
+# Create FastAPI instance for the web service
+app = FastAPI()
+
+# Define the main endpoint for report generation
+@app.post("/generate_image_report/")
+async def generate_report(
+    image: UploadFile = File(...),  # Required image file upload
+    query: str = Form("Patient presents with cough and fever. Please interpret the attached chest X-ray."),  # Optional clinical context
+):
+    """
+    Generate a structured radiology report from an uploaded medical image
+    
+    Args:
+        image: Uploaded image file (chest X-ray)
+        query: Clinical context or specific questions about the image
+    
+    Returns:
+        JSONResponse: Structured report with separate sections
+    """
+    # Read the uploaded image into memory
+    img_bytes = await image.read()
+    
+    # Convert image to base64 for API transmission
+    b64_img = base64.b64encode(img_bytes).decode('utf-8')
+    
+    # Combine the standard prompt with user's specific query
+    full_user_message = user_prompt + "\n\n" + query
+    
+    # Prepare the API request payload
+    data = {
+        "model": "openai/gpt-4.1",  # Using Llama 3.2 90B Vision model
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": [
+                {"type": "text", "text": full_user_message},
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b64_img}}
+            ]}
+        ],
+        "max_tokens": 1000,      # Allow longer responses for detailed reports
+        "temperature": 0.2,     # Lower temperature for more consistent medical terminology
+        "top_p": 0.7           # Nucleus sampling for balanced creativity vs accuracy
+    }
+    
+    # Set request headers with API key
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    # Make the API request to OpenRouter
+    response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
+    
+    # Parse the API response
+    result = response.json()
+    
+    # Check if the response contains valid choices
+    if "choices" in result:
+        # Extract the generated report text
+        raw_report = result["choices"][0]["message"]["content"]
+        
+        # Parse the report into structured sections
+        structured_report = parse_report(raw_report)
+        
+        # Return the structured report as JSON
+        return JSONResponse(structured_report)
+    else:
+        # Return error details if the API call failed
+        return JSONResponse({"error": result}, status_code=400)
+
+# ---- RUN THE FASTAPI SERVER ----
+# Start the server on localhost port 8000
+# Access the API at http://localhost:8000/generate_report/
+
 # --- Main execution block to run the FastAPI app with Uvicorn ---
 if __name__ == "__main__":
     print("Starting FastAPI server with Uvicorn...")
