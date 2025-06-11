@@ -25,6 +25,16 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import RetrievalQA
 from langchain.schema import Document # Ensure Document is imported
 
+import os
+from dotenv import load_dotenv
+import openai
+import base64
+import uvicorn
+from fastapi import FastAPI, File, UploadFile, Form
+from fastapi.responses import JSONResponse
+import requests
+import re
+
 # --- FastAPI and Pydantic for API creation ---
 from fastapi import FastAPI
 from pydantic import BaseModel
