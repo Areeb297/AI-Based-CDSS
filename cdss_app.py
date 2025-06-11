@@ -621,23 +621,43 @@ def clinical_pathways(case: PathwayTestCase):
 # ---- DETAILED PROMPT CONFIGURATION ----
 # System prompt defines the AI assistant's expertise and behavior
 system_prompt = (
-    "You are a highly trained, detail-oriented clinical radiology assistant. Your answers must always include clear laterality, precise anatomic locations, and mention of classic radiological signs if present. If the findings are ambiguous, state so honestly and recommend further steps."
+    "You are an AI clinical decision support system (CDSS) integrated into a hospital information system (HIS). "
+    "Your role is to assist healthcare providers across specialties by providing structured analysis and clinical guidance for all types of diagnostic imaging. "
+    "Your analysis must be:\n"
+    "- Clear and actionable for non-radiologist clinicians\n"
+    "- Focused on clinical implications and next steps\n"
+    "- Structured for easy integration into clinical workflows\n"
+    "- Prioritized by clinical urgency\n"
+    "Maintain high clinical accuracy while ensuring the output is accessible to all healthcare providers."
 )
 
-# User prompt provides specific instructions for chest X-ray interpretation
-# This prompt ensures thorough analysis and prevents missing subtle findings
+# User prompt provides specific instructions for X-ray interpretation
 user_prompt = (
-    "You are a radiology assistant reviewing a an X-ray for a physician. You are an expert at analyzing x-rays, well-trained. Always give an accurate output, clinically valid, do not provide false or threating suggestions"
-    "You must actively search for and describe any possible abnormal findings, even if subtle or borderline. "
-    "Never declare the X-ray completely normal unless you are absolutely certain. "
-    "If there is any uncertainty, mention and describe all possible abnormalities, opacities, densities, lesions, or subtle changes. "
-    "Include a brief differential diagnosis for any finding, and always comment on the most clinically significant abnormalities first.\n\n"
+    "You are an AI clinical decision support system analyzing this diagnostic image. "
+    "Your report must be clinically actionable and follow standard clinical pathways.\n\n"
+    "Key requirements:\n"
+    "- Identify the specific type of X-ray and its clinical context\n"
+    "- Focus on clinically significant findings\n"
+    "- Provide clear, actionable recommendations\n"
+    "- Include relevant clinical pathways\n"
+    "- Suggest appropriate next steps in patient care\n\n"
     "Write your report using this exact format:\n\n"
-    "1. AP (Frontal) View: [A detailed, well-structured paragraph describing all findings, both positive and negative, including any subtle abnormalities, their location and laterality, and classic radiological signs if present.]\n\n"
-    "2. Lateral View: [A paragraph describing findings for the lateral view, including confirmation or refutation of AP findings, and any new abnormalities seen only on the lateral view.]\n\n"
-    "3. Impression: [A concise summary diagnosis, mentioning any abnormal findings, differentials, and clinical recommendations.]\n\n"
-    "4. Recommendations: [A short paragraph with specific next steps, such as further imaging, clinical follow-up, or limitations of the study.]\n\n"
-    "Do NOT use bullet points, asterisks, or special characters. Each section must be a numbered header followed by a paragraph, separated by a blank line. Focus on clinical safety and do not miss subtle findings."
+    "1. Study Information: [Type of X-ray, clinical context, and key technical factors]\n\n"
+    "2. Clinical Findings: [Structured description of findings with:\n"
+    "   - Clinical significance and urgency\n"
+    "   - Relevant measurements and comparisons\n"
+    "   - Impact on patient management]\n\n"
+    "3. Clinical Assessment: [Structured analysis including:\n"
+    "   - Primary clinical diagnosis\n"
+    "   - Differential diagnoses with likelihood\n"
+    "   - Clinical risk assessment\n"
+    "   - Impact on current treatment plan]\n\n"
+    "4. Clinical Recommendations: [Actionable guidance including:\n"
+    "   - Immediate next steps\n"
+    "   - Suggested clinical pathway\n"
+    "   - Required consultations\n"
+    "   - Follow-up recommendations]\n\n"
+    "Use clear, clinical terminology throughout. Each section must be a numbered header followed by a detailed paragraph, separated by a blank line."
 )
 
 # Get OpenRouter API key from environment variable
@@ -659,11 +679,11 @@ def parse_report(report_text):
         dict: Dictionary with keys for each report section
     """
     # Define expected section keys for the structured report
-    keys = ["AP_View", "Lateral_View", "Impression", "Recommendations"]
+    keys = ["Study_Information", "Clinical_Findings", "Clinical_Assessment", "Clinical_Recommendations"]
     
     # Use regex to split the report by numbered section headers
     # This pattern matches variations of section names
-    sections = re.split(r'\n*\d\.\s*(?:AP \(Frontal\) View|Lateral View|Impression|Recommendations):', report_text)
+    sections = re.split(r'\n*\d\.\s*(?:Study Information|Clinical Findings|Clinical Assessment|Clinical Recommendations):', report_text)
     
     # Clean up sections - remove empty strings and whitespace
     sections = [s.strip() for s in sections if s.strip()]
@@ -680,13 +700,13 @@ app = FastAPI()
 @app.post("/generate_image_report/")
 async def generate_report(
     image: UploadFile = File(...),  # Required image file upload
-    query: str = Form("Patient presents with cough and fever. Please interpret the attached chest X-ray."),  # Optional clinical context
+    query: str = Form("Please provide a comprehensive clinical analysis and recommendations for this diagnostic image."),  # Optional clinical context
 ):
     """
-    Generate a structured radiology report from an uploaded medical image
+    Generate a structured clinical report from an uploaded medical image
     
     Args:
-        image: Uploaded image file (chest X-ray)
+        image: Uploaded image file (any type of X-ray)
         query: Clinical context or specific questions about the image
     
     Returns:
@@ -711,9 +731,9 @@ async def generate_report(
                 {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b64_img}}
             ]}
         ],
-        "max_tokens": 1000,      # Allow longer responses for detailed reports
-        "temperature": 0.2,     # Lower temperature for more consistent medical terminology
-        "top_p": 0.7           # Nucleus sampling for balanced creativity vs accuracy
+        "max_tokens": 1500,      # Increased for more detailed reports
+        "temperature": 0.1,     # Lower temperature for more precise clinical terminology
+        "top_p": 0.8           # Adjusted for balanced clinical accuracy
     }
     
     # Set request headers with API key
