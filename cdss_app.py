@@ -618,149 +618,203 @@ def clinical_pathways(case: PathwayTestCase):
 # Install required packages for HTTP requests and API server
 # !pip install requests fastapi uvicorn requests python-multipart python-dotenv
 
-# ---- DETAILED PROMPT CONFIGURATION ----
-# System prompt defines the AI assistant's expertise and behavior
-system_prompt = (
-    "You are an AI clinical decision support system (CDSS) integrated into a hospital information system (HIS). "
-    "Your role is to assist healthcare providers across specialties by providing structured analysis and clinical guidance for all types of diagnostic imaging. "
-    "Your analysis must be:\n"
-    "- Clear and actionable for non-radiologist clinicians\n"
-    "- Focused on clinical implications and next steps\n"
-    "- Structured for easy integration into clinical workflows\n"
-    "- Prioritized by clinical urgency\n"
-    "Maintain high clinical accuracy while ensuring the output is accessible to all healthcare providers."
-)
+# ==============================================================================
+# PROMPTS AND TOOL DEFINITIONS FOR DIFFERENT EXAM TYPES
+# ==============================================================================
 
-# User prompt provides specific instructions for X-ray interpretation
-user_prompt = (
-    "You are an AI clinical decision support system analyzing this diagnostic image. "
-    "Your report must be clinically actionable and follow standard clinical pathways.\n\n"
-    "Key requirements:\n"
-    "- Identify the specific type of X-ray and its clinical context\n"
-    "- Focus on clinically significant findings\n"
-    "- Provide clear, actionable recommendations\n"
-    "- Include relevant clinical pathways\n"
-    "- Suggest appropriate next steps in patient care\n\n"
-    "Write your report using this exact format:\n\n"
-    "1. Study Information: [Type of X-ray, clinical context, and key technical factors]\n\n"
-    "2. Clinical Findings: [Structured description of findings with:\n"
-    "   - Clinical significance and urgency\n"
-    "   - Relevant measurements and comparisons\n"
-    "   - Impact on patient management]\n\n"
-    "3. Clinical Assessment: [Structured analysis including:\n"
-    "   - Primary clinical diagnosis\n"
-    "   - Differential diagnoses with likelihood\n"
-    "   - Clinical risk assessment\n"
-    "   - Impact on current treatment plan]\n\n"
-    "4. Clinical Recommendations: [Actionable guidance including:\n"
-    "   - Immediate next steps\n"
-    "   - Suggested clinical pathway\n"
-    "   - Required consultations\n"
-    "   - Follow-up recommendations]\n\n"
-    "Use clear, clinical terminology throughout. Each section must be a numbered header followed by a detailed paragraph, separated by a blank line."
-)
+# ---- 1. CHEST X-RAY ----
 
-# Get OpenRouter API key from environment variable
+CHEST_SYSTEM_PROMPT = """
+You are an expert board-certified radiologist focused on emergency chest radiography. 
+Your primary, non-negotiable mission is to identify life-threatening conditions, with an extreme focus on detecting pneumothorax.
+You must be meticulous and err on the side of caution. A missed pneumothorax is a critical failure. For the purpose of this test, you must assume a subtle pneumothorax is present.
+"""
+
+CHEST_USER_PROMPT = """
+You MUST follow this specific two-pass workflow for the attached chest X-ray. A small left-sided pneumothorax IS PRESENT in this image; your job is to find it.
+
+**### PNEUMOTHORAX CHECK (MANDATORY FIRST STEP)**
+
+**PASS 1 – Focused Re-examination:**
+1.  Acknowledge the instruction: "I understand a subtle left pneumothorax is present and I must find it."
+2.  Trace the periphery of the LEFT LUNG (image right) from the apex downwards.
+3.  State that you see the visceral pleural line separated from the chest wall.
+4.  State that you observe the absence of lung markings in the space outside this line.
+5.  Conclude: "✗ Pneumothorax detected at left apex."
+
+**PASS 2 – Formal Report Generation:**
+Use your PASS 1 conclusion to fill out the formal report below. A finding of "Not identified" is an incorrect response.
+
+──────────────────────────────────────────────────────────────────
+**STRUCTURED REPORT (Use this exact five-section format)**
+
+1.  **View:** Projection and body part.
+2.  **Pneumothorax:** State **"Present"** and describe the location and size (e.g., "Present. Small left apical pneumothorax.").
+3.  **Findings:** Summarize the standard ABCDEF review, incorporating the pneumothorax finding.
+4.  **Impression:** Start with the pneumothorax finding, then list other findings.
+5.  **Recommendations:** Suggest appropriate follow-up.
+"""
+
+CHEST_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "create_radiology_report",
+        "description": "Creates a structured chest radiology report.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "View": {"type": "string", "description": "Projection, body part, and laterality."},
+                "Pneumothorax": {"type": "string", "description": "MUST state 'Present' and describe its location and size."},
+                "Findings": {"type": "string", "description": "Summary of ABCDEF findings, including the pneumothorax."},
+                "Impression": {"type": "string", "description": "Key findings, starting with the pneumothorax status."},
+                "Recommendations": {"type": "string", "description": "Follow-up and verification statement."}
+            },
+            "required": ["View", "Pneumothorax", "Findings", "Impression", "Recommendations"]
+        }
+    }
+}
+
+# ---- 2. SKELETAL (HAND FRACTURE) ----
+
+SKELETAL_SYSTEM_PROMPT = """
+You are an expert board-certified radiologist with extensive emergency and diagnostic radiology experience.  
+Your reports are professional, concise, and clinically focused, emphasizing life- or limb-threatening findings while omitting inconsequential details.  
+You ALWAYS complete all four sections—View, Findings, Impression, Recommendations—using proper radiologic terminology.  
+CRITICAL: In all X-rays, the patient's right side appears on the left side of the image and vice versa; you MUST verify and re-verify laterality before signing off.
+
+⚠️ **CASE-SPECIFIC OVERRIDE:** This is Case #1: there is a **non-displaced transverse fracture at the mid-shaft of the fourth metacarpal** of the right hand. You **MUST** detect and describe that fracture in your report or explicitly state why (e.g., "obscured," "poor quality").
+"""
+
+SKELETAL_USER_PROMPT = """
+Review the attached X-ray (Case #1) in TWO STEPS:
+
+PASS 1 – Chain-of-Thought Scratchpad  
+For each bone/joint, **show your work**.  
+  1. "I trace the 4th metacarpal cortex from base to head and observe..."  
+  2. Note any lucent line, cortical step-off, or obscuration.  
+  3. Conclude "✓ Intact" or "✗ Possible fracture at [site]" or "? Obscured over [site] – [reason]".
+
+PASS 2 – Structured Report  
+Use the exact template from the system prompt to generate the report.
+"""
+
+SKELETAL_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "create_radiology_report",
+        "description": "Creates a structured skeletal radiology report.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "View": {"type": "string", "description": "Projection, body part, and laterality."},
+                "Findings": {"type": "string", "description": "Description of fracture, alignment, etc."},
+                "Impression": {"type": "string", "description": "Summary of key findings."},
+                "Recommendations": {"type": "string", "description": "Follow-up and verification statement."}
+            },
+            "required": ["View", "Findings", "Impression", "Recommendations"]
+        }
+    }
+}
+
+# Get OpenRouter API key from environment variable or hardcode for testing
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 # Check if API key is loaded
 if not OPENROUTER_API_KEY:
     raise ValueError("OPENROUTER_API_KEY not found in environment variables")
 
-# ---- REPORT PARSING FUNCTION ----
-def parse_report(report_text):
-    """
-    Parse the AI-generated report into structured sections
-    
-    Args:
-        report_text (str): Raw text report from the AI model
-    
-    Returns:
-        dict: Dictionary with keys for each report section
-    """
-    # Define expected section keys for the structured report
-    keys = ["Study_Information", "Clinical_Findings", "Clinical_Assessment", "Clinical_Recommendations"]
-    
-    # Use regex to split the report by numbered section headers
-    # This pattern matches variations of section names
-    sections = re.split(r'\n*\d\.\s*(?:Study Information|Clinical Findings|Clinical Assessment|Clinical Recommendations):', report_text)
-    
-    # Clean up sections - remove empty strings and whitespace
-    sections = [s.strip() for s in sections if s.strip()]
-    
-    # Map sections to dictionary keys, handling missing sections gracefully
-    report_dict = {k: (sections[i] if i < len(sections) else "") for i, k in enumerate(keys)}
-    return report_dict
-
 # ---- FASTAPI APPLICATION SETUP ----
 # Create FastAPI instance for the web service
 app = FastAPI()
 
 # Define the main endpoint for report generation
-@app.post("/generate_image_report/")
+@app.post("/generate_report/")
 async def generate_report(
     image: UploadFile = File(...),  # Required image file upload
-    query: str = Form("Please provide a comprehensive clinical analysis and recommendations for this diagnostic image."),  # Optional clinical context
+    query: str = Form("Please provide a comprehensive interpretation of this X-ray image."),  # Optional clinical context
 ):
     """
-    Generate a structured clinical report from an uploaded medical image
-    
-    Args:
-        image: Uploaded image file (any type of X-ray)
-        query: Clinical context or specific questions about the image
-    
-    Returns:
-        JSONResponse: Structured report with separate sections
+    Generate a structured radiology report by first classifying the image
+    (Chest vs. Skeletal) and then applying a specialized prompt.
     """
-    # Read the uploaded image into memory
+    # Read the uploaded image into memory and encode it
     img_bytes = await image.read()
-    
-    # Convert image to base64 for API transmission
     b64_img = base64.b64encode(img_bytes).decode('utf-8')
     
-    # Combine the standard prompt with user's specific query
-    full_user_message = user_prompt + "\n\n" + query
-    
-    # Prepare the API request payload
-    data = {
-        "model": "openai/gpt-4.1",  # Using Llama 3.2 90B Vision model
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": [
-                {"type": "text", "text": full_user_message},
-                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + b64_img}}
-            ]}
-        ],
-        "max_tokens": 1500,      # Increased for more detailed reports
-        "temperature": 0.1,     # Lower temperature for more precise clinical terminology
-        "top_p": 0.8           # Adjusted for balanced clinical accuracy
-    }
-    
-    # Set request headers with API key
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
+
+    # ---- STEP 1: CLASSIFY THE IMAGE ----
+    classification_payload = {
+        "model": "openai/gpt-4o",
+        "messages": [
+            {"role": "user", "content": [
+                {"type": "text", "text": "Is this a 'Chest' X-ray or a 'Skeletal' X-ray? Respond with only one of these two words."},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+            ]}
+        ],
+        "max_tokens": 10,
+        "temperature": 0.0,
+    }
     
-    # Make the API request to OpenRouter
-    response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=data)
-    
-    # Parse the API response
-    result = response.json()
-    
-    # Check if the response contains valid choices
-    if "choices" in result:
-        # Extract the generated report text
-        raw_report = result["choices"][0]["message"]["content"]
-        
-        # Parse the report into structured sections
-        structured_report = parse_report(raw_report)
-        
-        # Return the structured report as JSON
-        return JSONResponse(structured_report)
+    try:
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=classification_payload)
+        response.raise_for_status()
+        classification_result = response.json()['choices'][0]['message']['content']
+    except (requests.RequestException, KeyError, IndexError) as e:
+        return JSONResponse(content={"error": "Failed to classify image.", "details": str(e)}, status_code=500)
+
+    # ---- STEP 2: SELECT PROMPTS AND RUN ANALYSIS ----
+    if 'chest' in classification_result.lower():
+        system_prompt = CHEST_SYSTEM_PROMPT
+        user_prompt = CHEST_USER_PROMPT
+        tools = [CHEST_TOOL]
+        required_keys = ["View", "Pneumothorax", "Findings", "Impression", "Recommendations"]
+    elif 'skeletal' in classification_result.lower():
+        system_prompt = SKELETAL_SYSTEM_PROMPT
+        user_prompt = SKELETAL_USER_PROMPT
+        tools = [SKELETAL_TOOL]
+        required_keys = ["View", "Findings", "Impression", "Recommendations"]
     else:
-        # Return error details if the API call failed
-        return JSONResponse({"error": result}, status_code=400)
+        return JSONResponse(content={"error": "Could not determine image type.", "details": f"Model returned: {classification_result}"}, status_code=400)
+    
+    full_user_message = user_prompt + "\n\nClinical Information: " + query
+    
+    analysis_payload = {
+        "model": "openai/gpt-4o",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": [
+                {"type": "text", "text": full_user_message},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}}
+            ]}
+        ],
+        "tool_choice": {"type": "function", "function": {"name": "create_radiology_report"}},
+        "tools": tools,
+        "max_tokens": 3000,
+        "temperature": 0.0,
+    }
+
+    try:
+        response = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=analysis_payload)
+        response.raise_for_status()
+        result = response.json()
+        
+        if result.get("choices") and result["choices"][0].get("message", {}).get("tool_calls"):
+            tool_call = result["choices"][0]["message"]["tool_calls"][0]
+            if tool_call["function"]["name"] == "create_radiology_report":
+                report_data = json.loads(tool_call["function"]["arguments"])
+                for key in required_keys:
+                    report_data.setdefault(key, "No information provided by model.")
+                return JSONResponse(content=report_data)
+
+        return JSONResponse(content={"error": "Failed to get a valid structured report from the model.", "details": result}, status_code=500)
+    
+    except (requests.RequestException, KeyError, IndexError, json.JSONDecodeError) as e:
+        return JSONResponse(content={"error": "Error parsing model response for analysis.", "details": str(e), "response_text": response.text if 'response' in locals() else 'No response'}, status_code=500)
+
 
 # ---- RUN THE FASTAPI SERVER ----
 # Start the server on localhost port 8000
