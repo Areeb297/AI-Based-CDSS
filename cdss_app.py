@@ -723,9 +723,6 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 if not OPENROUTER_API_KEY:
     raise ValueError("OPENROUTER_API_KEY not found in environment variables")
 
-# ---- FASTAPI APPLICATION SETUP ----
-# Create FastAPI instance for the web service
-app = FastAPI()
 
 # Define the main endpoint for report generation
 @app.post("/generate_report/")
