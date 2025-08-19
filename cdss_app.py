@@ -452,36 +452,28 @@ CONTEXT:
 )
 
 
-# === Initialize LLM for GROQ API and RAG Chain ===
-# === Initialize LLM for GROQ API and RAG Chain ===
-groq_api_key_for_llm = os.getenv("GROQ_API_KEY")
-open_router_api_key = os.getenv("OPENROUTER_API_KEY")
+# === Initialize LLM for OpenRouter API and RAG Chain ===
+openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+if not openrouter_api_key:
+    raise ValueError("OPENROUTER_API_KEY not found in .env file. This key is needed for the OpenRouter LLM.")
 
+# Allow model configuration via environment variable, default to free version
+openrouter_model = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
 
-OPENROUTER_BASE = os.getenv("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
-# Primary: paid/capacity-backed model
+# Primary LLM for clinical assessment
 llm = ChatOpenAI(
-    model="meta-llama/llama-3.3-70b-instruct",   # 70B Instruct
+    model=openrouter_model,
     temperature=0.0,
     openai_api_key=openrouter_api_key,
     openai_api_base=OPENROUTER_BASE,
     # Optional but recommended for OpenRouter rankings/analytics:
     default_headers={
-        "HTTP-Referer": "http://localhost:8000",  # your app/site URL
+        "HTTP-Referer": os.getenv("APP_URL", "http://localhost:8000"),  # Dynamic based on environment
         "X-Title": "Onasi-AI-CDSS"                 # your app name
     },
 )
-
-# if not groq_api_key_for_llm:
-#     raise ValueError("GROQ_API_KEY not found in .env file. This key is needed for the Groq LLM.")
-
-# llm = ChatOpenAI(
-#     model="llama3-70b-8192", # Or your preferred Groq model
-#     temperature=0.0,
-#     openai_api_key=groq_api_key_for_llm,
-#     openai_api_base="https://openrouter.ai/api/v1" # <<< CORRECTED PARAMETER NAME
-# )
 print("ChatOpenAI (LLM) initialized to use OpenRouter API.")
 
 rag_chain = RetrievalQA.from_chain_type(
@@ -492,11 +484,14 @@ rag_chain = RetrievalQA.from_chain_type(
 )
 
 llm_pathways = ChatOpenAI(
-    model="meta-llama/llama-3.3-70b-instruct",   # 70B Instruct
-    temperature=0.0,
+    model=openrouter_model,
+    temperature=0.1,
     openai_api_key=openrouter_api_key,
-    openai_api_base=OPENROUTER_BASE
-
+    openai_api_base=OPENROUTER_BASE,
+    default_headers={
+        "HTTP-Referer": os.getenv("APP_URL", "http://localhost:8000"),
+        "X-Title": "Onasi-AI-CDSS"
+    },
 )
 
 
