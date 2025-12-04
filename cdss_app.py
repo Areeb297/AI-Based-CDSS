@@ -19,11 +19,13 @@ load_dotenv() # Load environment variables from .env file
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_openai import OpenAIEmbeddings
-from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
-from langchain.chains import RetrievalQA
-from langchain.schema import Document # Ensure Document is imported
+
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+
+from langchain_core.prompts import PromptTemplate
+from langchain.chains.retrieval_qa.base import RetrievalQA
+from langchain_core.documents import Document
+
 
 import os
 from dotenv import load_dotenv
