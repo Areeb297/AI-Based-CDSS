@@ -1,127 +1,51 @@
-# Onasi CDSS - AI-Based Clinical Decision Support System - Management Overview
+## AI App Name
+Onasi AI-Based Clinical Decision Support System (CDSS)
 
-## Executive Summary
+## Summary
+Evidence-based CDSS providing drug safety checks, clinical management pathways, and basic radiology reporting. The system combines Retrieval-Augmented Generation (RAG) with large language models and a lightweight FastAPI service. Content is fact-based and sourced from reputable medical references.
 
-Onasi CDSS is a comprehensive AI-powered clinical decision support platform delivering three specialized healthcare applications through a unified API. The system leverages advanced AI technologies including Large Language Models (LLMs), Retrieval-Augmented Generation (RAG), and computer vision to provide evidence-based clinical decision support with Saudi healthcare context. The platform supports both text-based clinical queries and medical image analysis for comprehensive healthcare decision support.
+## Core features
+- Drug interaction and safety assessment (drug–drug, drug–allergy, drug–disease; pregnancy/lactation warnings; severity)
+- Clinical pathways generator (low/medium/high risk options with monitoring and trade-offs)
+- X‑ray report assistant (image type triage; structured report: View, Findings, Impression, Recommendations)
+- Auditable outputs with references where available
 
----
+## Architectural & Layers
+- Knowledge & Retrieval: PDF ingestion (PyPDF) → chunking → FAISS vector store; OpenAI embeddings for semantic search
+- Reasoning (Text): OpenRouter-hosted LLM for query answering and pathway generation
+- Vision (Images): GPT‑4o via OpenRouter for multimodal chest/skeletal X‑rays
+- API & Orchestration: FastAPI endpoints (`/clinical-assess`, `/clinical-pathways`, `/generate_report`) with prompt templates and contract enforcement
 
-## AI Applications Portfolio
+## Technology/Tool Stack
+- Backend: Python, FastAPI, Uvicorn, Pydantic
+- RAG: LangChain, FAISS, `text-embedding-ada-002` (OpenAI)
+- LLM (text): `meta-llama/llama-3.3-70b-instruct:free` via OpenRouter
+- LLM (vision): `openai/gpt-4o` via OpenRouter
+- Knowledge assets (examples): Drugs.com, UpToDate, FDA drug labels
+- Deployment: Render Web Services (Starter)
 
-### 1. Onasi Clinical Drug Assessment Engine
-**AI App Name:** Onasi Clinical Drug Assessment Engine  
-**Summary:** Comprehensive drug interaction and safety analysis system for multi-drug prescriptions  
-**Core Features:**
-- Drug-drug, drug-allergy, and drug-disease interaction detection
-- Pregnancy/lactation warnings and contraindications  
-- Age and gender-specific safety assessments
-- Severity risk stratification (Low/Medium/High)
-- Evidence-based recommendations with 50+ clinical references
-- Multi-drug combination analysis (supports 2+ drugs simultaneously)
-- Therapeutic class conflict detection and ingredient duplication warnings
+## API and hosting costs (indicative)
+- OpenAI embeddings (`text-embedding-ada-002`): approximately $0.0001 per 1K tokens — see OpenAI API pricing
+- GPT‑4o (used via OpenRouter for imaging): approximately $2.50 per million input tokens and $10.00 per million output tokens — see OpenAI API pricing
+- OpenRouter `meta-llama/llama‑3.3‑70b‑instruct:free`: $0/token on the free route (queue/throughput limits; paid routes vary by provider)
+- Render Web Service Starter plan: ~$7/month — see Render pricing
 
-**Architecture & Layers:**
-- **AI Layer:** RAG pipeline with FAISS vector search + OpenRouter LLM (Llama-3.3-70B)
-- **Knowledge Layer:** FDA drug labels, clinical guidelines, interaction databases
-- **Validation Layer:** Structured output with mandatory safety categories
-- **Reference Layer:** Automated citation linking with 50+ clinical sources
+Notes
+- Fact-based only; no regional localization. 
+- Knowledge assets include public medical websites (e.g., Drugs.com, UpToDate) and FDA labels.
 
-**Technology/Tool Stack:** FastAPI, FAISS, OpenAI Embeddings (text-embedding-ada-002), OpenRouter API (Llama-3.3-70B), LangChain, Pydantic, PyPDF processing
+## Client requirements (indicative)
+- Server OS: Linux (Ubuntu 20.04+/Debian) or Windows Server 2019+
+- Resources (per instance): 2 vCPU, 2–4 GB RAM, 10–20 GB SSD (FAISS index + logs)
+- Runtime: Python 3.10+, FastAPI via Uvicorn; deploy as Docker container or system service
+- Database: Not required by default (FAISS stored on disk). Optional: PostgreSQL 14+ or SQL Server 2019+ for auditing/analytics if you choose to persist results
+- Networking: Public HTTPS endpoint with reverse proxy (e.g., Nginx) or managed platform (Render)
+- Secrets: Environment variables or secret manager for API keys (OpenRouter, OpenAI)
 
----
-
-### 2. Onasi Clinical Pathways Generator  
-**AI App Name:** Onasi Clinical Pathways Generator  
-**Summary:** Risk-stratified treatment pathway recommendation system with Saudi healthcare localization  
-**Core Features:**
-- Three-tier treatment options (low/medium/high risk pathways)
-- Clinical monitoring requirements and trade-off analysis
-- Saudi-specific clinical guidelines and medication availability
-- Evidence-based alternative treatment suggestions
-- Patient-specific contraindication handling
-- Dose-specific recommendations with route, frequency, and duration
-- Cultural adaptation (no alcohol references, local practices)
-
-**Architecture & Layers:**
-- **Decision Layer:** Enhanced RAG retrieval with top-k=17 similarity search
-- **Reasoning Layer:** Multi-option pathway generation with risk assessment
-- **Localization Layer:** Saudi MOH guidelines integration
-- **Evidence Layer:** Clinical reference synthesis and citation mapping
-
-**Technology/Tool Stack:** FastAPI, RAG pipeline with FAISS vector search, OpenRouter API (Llama-3.3-70B), Saudi MOH guidelines database, Evidence synthesis engine, JSON structured output
-
----
-
-### 3. Onasi Radiology Report Analysis System
-**AI App Name:** Onasi Radiology Report Analysis System  
-**Summary:** AI-powered X-ray interpretation and structured reporting with specialized diagnostic focus  
-**Core Features:**
-- Automatic image classification (chest vs. skeletal X-rays)
-- Pneumothorax detection and fracture identification
-- Structured radiology report generation (View, Findings, Impression, Recommendations)
-- Multi-modal AI analysis combining image and clinical context
-- Standardized medical terminology and recommendations
-- Emergency condition prioritization (life-threatening findings)
-- Clinical context integration with uploaded images
-
-**Architecture & Layers:**
-- **Vision Layer:** OpenAI GPT-4o for multi-modal image analysis
-- **Classification Layer:** Automatic X-ray type detection and routing
-- **Reporting Layer:** Structured medical report templates with function calling
-- **Processing Layer:** Base64 image encoding and API orchestration
-
-**Technology/Tool Stack:** OpenRouter API, GPT-4o vision model, FastAPI, Image processing, Function calling, Base64 encoding, Multi-modal prompting, JSON structured output
-
----
-
-## Implementation Requirements & Client Prerequisites
-
-### Technical Infrastructure
-- **Server Requirements:** Python 3.8+, 8GB RAM minimum, SSD storage for vector indices
-- **Internet Connectivity:** Stable connection required for AI API access
-- **Processing Power:** Multi-core CPU recommended for concurrent requests
-
-### API Subscriptions Required
-- **OpenAI API:** For embeddings and vision models ($0.0001/1K tokens)
-- **OpenRouter API:** For LLM inference ($0.50-2.00/1M tokens depending on model)
-- **Backup LLM:** Groq API (optional) for redundancy
-
-### Data Dependencies
-- **Clinical Knowledge Base:** 21-page PDF with clinical guidelines (provided)
-- **Reference Database:** 50+ clinical references and citations (provided)
-- **Vector Index Storage:** ~500MB for FAISS indices (auto-generated)
-
-### Security & Compliance
-- **API Key Management:** Secure environment variable storage required
-- **Data Privacy:** No patient data stored locally (stateless processing)
-- **Audit Trail:** Request/response logging capability built-in
-- **Healthcare Compliance:** Designed for clinical decision support (not diagnosis)
-
-### Integration Specifications
-- **API Format:** RESTful endpoints with OpenAPI/Swagger documentation
-- **Authentication:** Bearer token support ready (currently open access)
-- **Response Format:** Structured JSON with consistent schema validation
-- **Error Handling:** Comprehensive error responses with debugging information
-- **Performance:** 5-45 second response times depending on complexity
-
-### Deployment Options
-- **Local Deployment:** Single server installation with Docker support
-- **Cloud Deployment:** AWS/Azure/GCP compatible
-- **Scalability:** Horizontal scaling through load balancers (API stateless)
-- **Monitoring:** Built-in logging and error tracking
-
----
-
-## Strategic Value Proposition
-
-**Clinical Impact:** Reduces medication errors, enhances clinical decision-making, and provides 24/7 expert-level consultation across drug interactions, treatment planning, and radiology interpretation.
-
-**Operational Efficiency:** Streamlines clinical workflows, reduces manual review time, and enables consistent evidence-based care delivery across healthcare facilities.
-
-**Risk Mitigation:** Proactive safety screening, comprehensive interaction detection, and evidence-backed recommendations reduce liability exposure and improve patient outcomes.
-
-**Scalability:** Single Onasi CDSS platform supporting multiple clinical use cases (text-based drug analysis, clinical pathways, and image-based radiology) with unified technology stack and maintenance requirements.
-
----
-
-*This system represents a production-ready AI healthcare platform with comprehensive documentation, testing frameworks, and integration capabilities suitable for enterprise healthcare deployment.*
+## Security
+- Transport: Enforce HTTPS/TLS for all endpoints; terminate TLS at load balancer or reverse proxy
+- Secrets handling: Store API keys only in env/secret manager; never in code or logs
+- Data handling: By default, no patient data persistence; if enabling storage, use encryption at rest, access controls, and retention policies
+- Access control: Optionally protect endpoints with API key or token; restrict ingress via firewall/IP allowlist when feasible
+- Observability: Centralized logging (exclude PHI/PII), rate limiting, and basic request auditing
+- Supply chain: Pin dependencies, patch regularly; restrict outbound egress to required AI endpoints

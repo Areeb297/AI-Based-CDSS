@@ -36,15 +36,27 @@ This repository contains comprehensive documentation for developers, integrators
 
 ### Prerequisites
 - Python 3.8+
-- API keys for OpenAI, Groq, and OpenRouter
+- OpenRouter API key (for both embeddings and LLM inference)
 - PDF knowledge base file
 - References database
 
 ### Installation
+
 ```bash
 # Clone repository
-git clone <repository-url>
-cd clinical-decision-support
+git clone https://github.com/Areeb297/AI-Based-CDSS.git
+cd AI-Based-CDSS
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# On Windows (Command Prompt):
+venv\Scripts\activate
+# On Windows (PowerShell):
+venv\Scripts\Activate.ps1
+# On macOS/Linux:
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -55,20 +67,23 @@ cp .env.example .env
 ```
 
 ### Configuration
-Create a `.env` file with your API keys:
+Create a `.env` file with your API key:
 ```env
-ACTUAL_OPENAI_API_KEY=your_openai_key_here
-GROQ_API_KEY=your_groq_key_here
-OPENROUTER_API_KEY=your_openrouter_key_here
-PORT=8000
+OPENROUTER_API_KEY=your_openrouter_key_here                    # Required: for embeddings and LLM
+OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free        # Optional: LLM model (default shown)
+OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-ada-002       # Optional: embedding model (default shown)
+APP_URL=http://localhost:8000                                  # Optional: for OpenRouter analytics
+PORT=10000                                                     # Optional: server port (default: 10000)
 ```
+
+> **Note:** The system now uses only OpenRouter for both embeddings and LLM inference, simplifying the setup to a single API key.
 
 ### Run the Application
 ```bash
 python cdss_app.py
 ```
 
-The API will be available at `http://localhost:8000`
+The API will be available at `http://localhost:10000` (or the port specified in your `PORT` environment variable)
 
 ## 🔗 API Endpoints
 

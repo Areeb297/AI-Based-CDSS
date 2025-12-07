@@ -3,6 +3,7 @@ import json
 import re # For regular expression operations
 from dotenv import load_dotenv # Import load_dotenv
 from pathlib import Path
+from typing import List
 
 # --- Potentially User-Configurable Paths ---
 pdf_path = "CDSS_Expected_Outputs_Cases_ALL.pdf"
@@ -12,35 +13,94 @@ faiss_index_path = "faiss_cdss_pdf"
 # --- Environment Variable Setup ---
 load_dotenv() # Load environment variables from .env file
 
-# We will now load and use specific keys for each service directly in their initialization,
-# so the generic api_key loading block below is removed.
-
 # --- Import Langchain and related libraries ---
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_openai import ChatOpenAI
+from langchain_core.embeddings import Embeddings
 
 from langchain_core.prompts import PromptTemplate
-from langchain.chains.retrieval_qa.base import RetrievalQA
+from langchain_classic.chains import RetrievalQA
 from langchain_core.documents import Document
 
-
-import os
-from dotenv import load_dotenv
-import openai
 import base64
 import uvicorn
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 import requests
-import re
 
 # --- FastAPI and Pydantic for API creation ---
-from fastapi import FastAPI
 from pydantic import BaseModel
-import uvicorn
+
+
+# === Custom OpenRouter Embeddings Class ===
+class OpenRouterEmbeddings(Embeddings):
+    """Custom embeddings class that uses OpenRouter API for text embeddings."""
+
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "openai/text-embedding-ada-002",
+        base_url: str = "https://openrouter.ai/api/v1/embeddings",
+        site_url: str = "http://localhost:8000",
+        site_name: str = "Onasi-AI-CDSS",
+        verify_ssl: bool = True
+    ):
+        self.api_key = api_key
+        self.model = model
+        self.base_url = base_url
+        self.site_url = site_url
+        self.site_name = site_name
+        # Allow disabling SSL verification for environments with SSL issues (e.g., corporate proxies)
+        self.verify_ssl = verify_ssl if os.getenv("VERIFY_SSL", "true").lower() != "false" else False
+
+    def _get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Get embeddings from OpenRouter API."""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": self.site_url,
+            "X-Title": self.site_name,
+        }
+
+        # OpenRouter supports batch embeddings
+        data = {
+            "model": self.model,
+            "input": texts,
+            "encoding_format": "float"
+        }
+
+        try:
+            response = requests.post(self.base_url, headers=headers, json=data, verify=self.verify_ssl)
+            response.raise_for_status()
+        except requests.exceptions.SSLError as e:
+            print(f"SSL Error: {e}")
+            print("Tip: If behind a corporate proxy, try setting VERIFY_SSL=false in your .env file")
+            raise
+
+        result = response.json()
+        # Extract embeddings from response and sort by index to maintain order
+        embeddings_data = sorted(result["data"], key=lambda x: x["index"])
+        return [item["embedding"] for item in embeddings_data]
+
+    def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """Embed a list of documents."""
+        # Process in batches to avoid API limits (OpenRouter typically supports batches)
+        batch_size = 100  # Adjust based on API limits
+        all_embeddings = []
+
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            batch_embeddings = self._get_embeddings(batch)
+            all_embeddings.extend(batch_embeddings)
+
+        return all_embeddings
+
+    def embed_query(self, text: str) -> List[float]:
+        """Embed a single query text."""
+        return self._get_embeddings([text])[0]
 
 # === Load references for post-processing ===
 try:
@@ -112,17 +172,21 @@ else:
 print("--- End of verification for filtered_doc_chunks_for_faiss ---\n")
 
 
-# 3. Initialize embeddings model for ACTUAL OPENAI
-actual_openai_api_key = os.getenv("ACTUAL_OPENAI_API_KEY")
-if not actual_openai_api_key:
-    raise ValueError("ACTUAL_OPENAI_API_KEY not found in .env file. This key is needed for OpenAI embeddings.")
+# 3. Initialize embeddings model using OpenRouter API
+openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+if not openrouter_api_key:
+    raise ValueError("OPENROUTER_API_KEY not found in .env file. This key is needed for embeddings and LLM.")
 
-embeddings = OpenAIEmbeddings(
-    model="text-embedding-ada-002",
-    openai_api_key=actual_openai_api_key
-    # By not specifying openai_api_base_url, it will default to the official OpenAI API endpoint.
+# Get optional embedding model from environment, default to text-embedding-ada-002
+embedding_model = os.getenv("OPENROUTER_EMBEDDING_MODEL", "openai/text-embedding-ada-002")
+
+embeddings = OpenRouterEmbeddings(
+    api_key=openrouter_api_key,
+    model=embedding_model,
+    site_url=os.getenv("APP_URL", "http://localhost:8000"),
+    site_name="Onasi-AI-CDSS"
 )
-print("OpenAIEmbeddings initialized to use actual OpenAI API.")
+print(f"OpenRouterEmbeddings initialized with model: {embedding_model}")
 
 # 4. Create FAISS vector store from document chunks
 index_file = Path(faiss_index_path) / "index.faiss"
@@ -455,9 +519,7 @@ CONTEXT:
 
 
 # === Initialize LLM for OpenRouter API and RAG Chain ===
-openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
-if not openrouter_api_key:
-    raise ValueError("OPENROUTER_API_KEY not found in .env file. This key is needed for the OpenRouter LLM.")
+# Note: openrouter_api_key is already loaded above for embeddings
 
 # Allow model configuration via environment variable, default to free version
 openrouter_model = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
@@ -733,12 +795,8 @@ SKELETAL_TOOL = {
     }
 }
 
-# Get OpenRouter API key from environment variable or hardcode for testing
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-
-# Check if API key is loaded
-if not OPENROUTER_API_KEY:
-    raise ValueError("OPENROUTER_API_KEY not found in environment variables")
+# Use the already-loaded OpenRouter API key for radiology endpoints
+OPENROUTER_API_KEY = openrouter_api_key  # Reuse the key loaded at startup
 
 
 # Define the main endpoint for report generation
