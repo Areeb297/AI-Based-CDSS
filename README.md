@@ -78,12 +78,157 @@ PORT=10000                                                     # Optional: serve
 
 > **Note:** The system now uses only OpenRouter for both embeddings and LLM inference, simplifying the setup to a single API key.
 
-### Run the Application
+### Run the Application (Local Development)
 ```bash
 python cdss_app.py
 ```
 
 The API will be available at `http://localhost:10000` (or the port specified in your `PORT` environment variable)
+
+## 🖥️ VPS Deployment (Production)
+
+### Server Setup (Ubuntu/Debian)
+
+```bash
+# SSH into your VPS
+ssh root@your_server_ip
+
+# Update system
+sudo apt update && sudo apt upgrade -y
+
+# Install Python and dependencies
+sudo apt install python3 python3-pip python3-venv git -y
+
+# Clone the repository
+git clone https://github.com/Areeb297/AI-Based-CDSS.git
+cd AI-Based-CDSS
+
+# Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Create .env file
+nano .env
+# Add your OPENROUTER_API_KEY and other config
+
+# Test run (Ctrl+C to stop)
+python cdss_app.py
+```
+
+### Run as Background Process (Keep Running After SSH Disconnect)
+
+#### Option 1: Using `nohup` (Simplest)
+```bash
+# Start the server in background
+cd ~/AI-Based-CDSS
+source venv/bin/activate
+nohup python cdss_app.py > cdss.log 2>&1 &
+
+# View logs
+tail -f cdss.log
+
+# Check if running
+ps aux | grep cdss_app
+
+# Stop the server
+pkill -f cdss_app.py
+```
+
+#### Option 2: Using `screen` (Recommended for Development)
+```bash
+# Install screen
+sudo apt install screen -y
+
+# Create a new screen session
+screen -S cdss
+
+# Run the app
+cd ~/AI-Based-CDSS
+source venv/bin/activate
+python cdss_app.py
+
+# Detach from screen: Press Ctrl+A, then D
+# You can now close SSH - the app keeps running
+
+# Reattach later
+screen -r cdss
+
+# List all screen sessions
+screen -ls
+```
+
+#### Option 3: Using `systemd` (Recommended for Production)
+```bash
+# Create service file
+sudo nano /etc/systemd/system/cdss.service
+```
+
+Add this content (adjust paths as needed):
+```ini
+[Unit]
+Description=CDSS AI FastAPI Application
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/root/AI-Based-CDSS
+Environment="PATH=/root/AI-Based-CDSS/venv/bin"
+EnvironmentFile=/root/AI-Based-CDSS/.env
+ExecStart=/root/AI-Based-CDSS/venv/bin/uvicorn cdss_app:app --host 0.0.0.0 --port 10000
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Then enable and start:
+```bash
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Start the service
+sudo systemctl start cdss
+
+# Enable auto-start on boot
+sudo systemctl enable cdss
+
+# Check status
+sudo systemctl status cdss
+
+# View logs
+sudo journalctl -u cdss -f
+
+# Restart service
+sudo systemctl restart cdss
+
+# Stop service
+sudo systemctl stop cdss
+```
+
+### Firewall Configuration
+```bash
+# Allow port 10000 through firewall
+sudo ufw allow 10000
+
+# Check firewall status
+sudo ufw status
+```
+
+### Access Your API
+Once deployed, your API will be available at:
+```
+http://your_server_ip:10000
+```
+
+Test endpoints:
+- Health check: `http://your_server_ip:10000/docs` (Swagger UI)
+- Clinical assess: `POST http://your_server_ip:10000/clinical-assess`
+- Clinical pathways: `POST http://your_server_ip:10000/clinical-pathways`
+- Radiology report: `POST http://your_server_ip:10000/generate_report/`
 
 ## 🔗 API Endpoints
 

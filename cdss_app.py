@@ -522,14 +522,14 @@ CONTEXT:
 # Note: openrouter_api_key is already loaded above for embeddings
 
 # Allow model configuration via environment variable, default to free version
-openrouter_model = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+openrouter_model = os.getenv("OPENROUTER_MODEL", "x-ai/grok-4.1-fast")
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
 # Primary LLM for clinical assessment
 llm = ChatOpenAI(
     model=openrouter_model,
-    temperature=0.0,
+    temperature=0.1,
     openai_api_key=openrouter_api_key,
     openai_api_base=OPENROUTER_BASE,
     # Optional but recommended for OpenRouter rankings/analytics:
