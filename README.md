@@ -70,7 +70,6 @@ cp .env.example .env
 Create a `.env` file with your API key:
 ```env
 OPENROUTER_API_KEY=your_openrouter_key_here                    # Required: for embeddings and LLM
-OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free        # Optional: LLM model (default shown)
 OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-ada-002       # Optional: embedding model (default shown)
 APP_URL=http://localhost:8000                                  # Optional: for OpenRouter analytics
 PORT=10000                                                     # Optional: server port (default: 10000)

@@ -110,69 +110,15 @@ except FileNotFoundError:
     print(f"Error: References file not found at {ref_path}")
     references_dict = {} # Default to empty if not found, or raise error
 
-# === PDF Loading and Vector Store Creation (RAG pipeline setup) ===
+# === Vector Store Creation (RAG pipeline setup) ===
+# IMPORTANT OPTIMIZATION:
+# - If a FAISS index already exists on disk, we load it directly.
+# - We ONLY parse/split the PDF when we need to (index missing).
 
-# 1. Load PDF document
-try:
-    loader = PyPDFLoader(pdf_path)
-    pdf_document_pages = loader.load_and_split() 
-except FileNotFoundError:
-    raise FileNotFoundError(f"Error: PDF file not found at {pdf_path}. Please check the path.")
-except Exception as e:
-    raise RuntimeError(f"Error loading PDF: {e}")
+index_file = Path(faiss_index_path) / "index.faiss"
+pkl_file = Path(faiss_index_path) / "index.pkl"
 
-
-# 2. Split document pages into smaller chunks
-splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
-doc_chunks = splitter.split_documents(pdf_document_pages)
-
-# 3. Filter document chunks to ensure they have valid content
-filtered_doc_chunks_for_faiss = []
-print(f"\nProcessing {len(doc_chunks)} document chunks from PDF...")
-for i, chunk in enumerate(doc_chunks):
-    content = chunk.page_content
-    metadata = chunk.metadata
-
-    if isinstance(content, str) and content.strip():
-        filtered_doc_chunks_for_faiss.append(chunk) 
-    else:
-        page_info = metadata.get('page', 'N/A') if metadata else 'N/A'
-        source_info = metadata.get('source', 'N/A') if metadata else 'N/A'
-        content_preview = str(content)[:100] + "..." if content and len(str(content)) > 100 else str(content)
-        print(f"Warning: Skipping document chunk from source '{source_info}', page {page_info} (original chunk index {i}) due to empty or invalid content. Type: {type(content)}, Content preview: '{content_preview}'")
-
-print(f"Number of valid document chunks for FAISS after filtering: {len(filtered_doc_chunks_for_faiss)}")
-
-if not filtered_doc_chunks_for_faiss:
-    raise ValueError("No valid document chunks with content found in the PDF after processing. Cannot build FAISS index.")
-
-# (Optional verification block for filtered_doc_chunks_for_faiss can remain if you find it useful)
-print("\n--- Verifying filtered_doc_chunks_for_faiss before FAISS.from_documents ---")
-# ... (verification code from your script) ...
-if not isinstance(filtered_doc_chunks_for_faiss, list):
-    print(f"CRITICAL ERROR: filtered_doc_chunks_for_faiss is not a list. Type: {type(filtered_doc_chunks_for_faiss)}")
-    raise TypeError("filtered_doc_chunks_for_faiss is not a list.")
-else:
-    print(f"filtered_doc_chunks_for_faiss is confirmed to be a list with {len(filtered_doc_chunks_for_faiss)} Document objects.")
-    all_docs_have_valid_content = True
-    for idx, doc_item in enumerate(filtered_doc_chunks_for_faiss):
-        if not isinstance(doc_item, Document):
-            print(f"CRITICAL ERROR: Element at index {idx} is NOT a Document object. Type: {type(doc_item)}")
-            all_docs_have_valid_content = False
-            break
-        if not isinstance(doc_item.page_content, str) or not doc_item.page_content.strip():
-            page_info = doc_item.metadata.get('page', 'N/A') if doc_item.metadata else 'N/A'
-            print(f"CRITICAL ERROR: Document object at index {idx} (page {page_info}) has invalid or empty page_content. Type: {type(doc_item.page_content)}")
-            all_docs_have_valid_content = False
-            break
-    if not all_docs_have_valid_content:
-        raise TypeError("CRITICAL: Not all Document objects in filtered_doc_chunks_for_faiss have valid, non-empty page_content. Check logs.")
-    else:
-        print("All Document objects in filtered_doc_chunks_for_faiss have been verified. Proceeding to FAISS.")
-print("--- End of verification for filtered_doc_chunks_for_faiss ---\n")
-
-
-# 3. Initialize embeddings model using OpenRouter API
+# Initialize embeddings model using OpenRouter API (needed for loading/building FAISS)
 openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 if not openrouter_api_key:
     raise ValueError("OPENROUTER_API_KEY not found in .env file. This key is needed for embeddings and LLM.")
@@ -188,10 +134,6 @@ embeddings = OpenRouterEmbeddings(
 )
 print(f"OpenRouterEmbeddings initialized with model: {embedding_model}")
 
-# 4. Create FAISS vector store from document chunks
-index_file = Path(faiss_index_path) / "index.faiss"
-pkl_file = Path(faiss_index_path) / "index.pkl"
-
 if index_file.exists() and pkl_file.exists():
     print(f"Loading existing FAISS index from {faiss_index_path}")
     # When loading, FAISS just needs an embedding function. The key used during its creation doesn't need to be active
@@ -199,6 +141,65 @@ if index_file.exists() and pkl_file.exists():
     # However, the `embeddings` object passed here should be compatible (same model, dimensions).
     vectordb = FAISS.load_local(faiss_index_path, embeddings, allow_dangerous_deserialization=True)
 else:
+    # 1. Load PDF document
+    try:
+        loader = PyPDFLoader(pdf_path)
+        pdf_document_pages = loader.load_and_split()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Error: PDF file not found at {pdf_path}. Please check the path.")
+    except Exception as e:
+        raise RuntimeError(f"Error loading PDF: {e}")
+
+    # 2. Split document pages into smaller chunks
+    splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=100)
+    doc_chunks = splitter.split_documents(pdf_document_pages)
+
+    # 3. Filter document chunks to ensure they have valid content
+    filtered_doc_chunks_for_faiss = []
+    print(f"\nProcessing {len(doc_chunks)} document chunks from PDF...")
+    for i, chunk in enumerate(doc_chunks):
+        content = chunk.page_content
+        metadata = chunk.metadata
+
+        if isinstance(content, str) and content.strip():
+            filtered_doc_chunks_for_faiss.append(chunk)
+        else:
+            page_info = metadata.get('page', 'N/A') if metadata else 'N/A'
+            source_info = metadata.get('source', 'N/A') if metadata else 'N/A'
+            content_preview = str(content)[:100] + "..." if content and len(str(content)) > 100 else str(content)
+            print(f"Warning: Skipping document chunk from source '{source_info}', page {page_info} (original chunk index {i}) due to empty or invalid content. Type: {type(content)}, Content preview: '{content_preview}'")
+
+    print(f"Number of valid document chunks for FAISS after filtering: {len(filtered_doc_chunks_for_faiss)}")
+
+    if not filtered_doc_chunks_for_faiss:
+        raise ValueError("No valid document chunks with content found in the PDF after processing. Cannot build FAISS index.")
+
+    # Optional (but useful) verification before building FAISS.
+    # Enable with: VERIFY_FAISS_BUILD_INPUT=true
+    if os.getenv("VERIFY_FAISS_BUILD_INPUT", "false").lower() == "true":
+        print("\n--- Verifying filtered_doc_chunks_for_faiss before FAISS.from_documents ---")
+        if not isinstance(filtered_doc_chunks_for_faiss, list):
+            print(f"CRITICAL ERROR: filtered_doc_chunks_for_faiss is not a list. Type: {type(filtered_doc_chunks_for_faiss)}")
+            raise TypeError("filtered_doc_chunks_for_faiss is not a list.")
+        else:
+            print(f"filtered_doc_chunks_for_faiss is confirmed to be a list with {len(filtered_doc_chunks_for_faiss)} Document objects.")
+            all_docs_have_valid_content = True
+            for idx, doc_item in enumerate(filtered_doc_chunks_for_faiss):
+                if not isinstance(doc_item, Document):
+                    print(f"CRITICAL ERROR: Element at index {idx} is NOT a Document object. Type: {type(doc_item)}")
+                    all_docs_have_valid_content = False
+                    break
+                if not isinstance(doc_item.page_content, str) or not doc_item.page_content.strip():
+                    page_info = doc_item.metadata.get('page', 'N/A') if doc_item.metadata else 'N/A'
+                    print(f"CRITICAL ERROR: Document object at index {idx} (page {page_info}) has invalid or empty page_content. Type: {type(doc_item.page_content)}")
+                    all_docs_have_valid_content = False
+                    break
+            if not all_docs_have_valid_content:
+                raise TypeError("CRITICAL: Not all Document objects in filtered_doc_chunks_for_faiss have valid, non-empty page_content. Check logs.")
+            else:
+                print("All Document objects in filtered_doc_chunks_for_faiss have been verified. Proceeding to FAISS.")
+        print("--- End of verification for filtered_doc_chunks_for_faiss ---\n")
+
     print(f"FAISS index not found. Building new index at {faiss_index_path} ...")
     vectordb = FAISS.from_documents(filtered_doc_chunks_for_faiss, embeddings)
     vectordb.save_local(faiss_index_path)
@@ -521,8 +522,8 @@ CONTEXT:
 # === Initialize LLM for OpenRouter API and RAG Chain ===
 # Note: openrouter_api_key is already loaded above for embeddings
 
-# Allow model configuration via environment variable, default to free version
-openrouter_model = os.getenv("OPENROUTER_MODEL", "x-ai/grok-4.1-fast")
+# Text model (hardcoded by design per deployment preference)
+openrouter_model = "openai/gpt-5.2"
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
@@ -599,7 +600,8 @@ def enforce_contract(output_json, references_dict_lookup):
         if isinstance(values, list):
             for value_item in values:
                 if isinstance(value_item, str): 
-                    found_numbers = re.findall(r"[(\d+)]", value_item) # Corrected regex
+                    # Extract reference numbers like [1][2][10]
+                    found_numbers = re.findall(r"\[(\d+)\]", value_item)
                     for num_str in found_numbers:
                         ref_nums_extracted.add(num_str)
     
@@ -645,7 +647,7 @@ def extract_json_from_response(text: str) -> dict:
 @app.post("/clinical-assess")
 def assess_case(request: ClinicalRequest):
     user_query = (
-        f"Input:\n{request.dict()}\n"
+        f"Input:\n{request.model_dump()}\n"
         "Generate structured output as shown in the clinical decision support format provided in the prompt."
     )
     try:
@@ -797,6 +799,8 @@ SKELETAL_TOOL = {
 
 # Use the already-loaded OpenRouter API key for radiology endpoints
 OPENROUTER_API_KEY = openrouter_api_key  # Reuse the key loaded at startup
+# Vision-capable model for /generate_report/ (hardcoded)
+OPENROUTER_VISION_MODEL = "openai/gpt-4o"
 
 
 # Define the main endpoint for report generation
@@ -820,7 +824,7 @@ async def generate_report(
 
     # ---- STEP 1: CLASSIFY THE IMAGE ----
     classification_payload = {
-        "model": "openai/gpt-4o",
+        "model": OPENROUTER_VISION_MODEL,
         "messages": [
             {"role": "user", "content": [
                 {"type": "text", "text": "Is this a 'Chest' X-ray or a 'Skeletal' X-ray? Respond with only one of these two words."},
@@ -855,7 +859,7 @@ async def generate_report(
     full_user_message = user_prompt + "\n\nClinical Information: " + query
     
     analysis_payload = {
-        "model": "openai/gpt-4o",
+        "model": OPENROUTER_VISION_MODEL,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": [

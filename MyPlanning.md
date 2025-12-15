@@ -1,5 +1,43 @@
 # 🎯 Project Planning Log
 
+## 📅 Current Session: Monday Dec 15, 2025
+**Session ID**: CDSS-20251215-001
+**User Request**: Make deployed API faster; use `openai/gpt-5.2` (OpenRouter) and optimize `cdss_app.py` startup/request overhead.
+
+### 🎯 Task Breakdown
+- [x] **Task 1**: Baseline current bottlenecks (startup vs request-time) from code/logs | Complexity: Simple | ETA: 3 mins
+- [x] **Task 2**: Optimize startup by skipping PDF load/splitting when FAISS index exists | Complexity: Simple | ETA: 10 mins
+- [x] **Task 3**: Switch default OpenRouter text model to `openai/gpt-5.2` (env override preserved) | Complexity: Simple | ETA: 3 mins
+- [x] **Task 4**: Fix log spam + small overhead: Pydantic v2 `.dict()` deprecation + reference extraction regex | Complexity: Simple | ETA: 5 mins
+- [x] **Task 5**: Update README env examples for new defaults/knobs | Complexity: Simple | ETA: 5 mins
+- [x] **Task 6**: Hardcode model selection in `cdss_app.py` (no model env vars) per user preference | Complexity: Simple | ETA: 3 mins
+
+### 📊 Impact Assessment
+**Change Category**: 🟢 Simple
+**Files Affected**:
+- `cdss_app.py` (refactor startup flow; config defaults; minor bugfixes)
+- `README.md` (documentation update only)
+- `MyPlanning.md` (planning log)
+
+**Risk Level**: Low
+**Approval Status**: ✅ Auto-approved (Simple change; no breaking API contract)
+
+### 🧪 Testing Strategy
+- Validate `python -m py_compile cdss_app.py` passes
+- Smoke: app starts and loads FAISS without parsing PDF when index exists
+- Smoke: `/clinical-assess` no longer prints reference extraction warnings
+
+### 📋 Next Steps
+- ✅ Implemented changes in `cdss_app.py` and updated README (Dec 15, 2025)
+- Deploy with hardcoded models in `cdss_app.py` (no model env vars required)
+
+### ✅ Completed Tasks
+- ✅ **Task 2**: Startup optimization (skip PDF parse when FAISS exists) - Dec 15, 2025
+- ✅ **Task 3**: Default model set to `openai/gpt-5.2` - Dec 15, 2025
+- ✅ **Task 4**: Fixed Pydantic deprecation + reference regex warning spam - Dec 15, 2025
+- ✅ **Task 5**: Updated README env examples - Dec 15, 2025
+- ✅ **Task 6**: Hardcoded models in `cdss_app.py` (no model env vars) - Dec 15, 2025
+
 ## 📅 Current Session: Sunday Dec 7, 2025
 **Session ID**: CDSS-20251207-001
 **User Request**: Fix LangChain import errors for `RetrievalQA` in `cdss_app.py` - module has moved in latest LangChain v1.1.0
