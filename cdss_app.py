@@ -523,7 +523,7 @@ CONTEXT:
 # Note: openrouter_api_key is already loaded above for embeddings
 
 # Text model (hardcoded by design per deployment preference)
-openrouter_model = "openai/gpt-5.2"
+openrouter_model = "x-ai/grok-4.1-fast"
 
 OPENROUTER_BASE = "https://openrouter.ai/api/v1"
 
